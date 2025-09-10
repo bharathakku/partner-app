@@ -1,12 +1,12 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { Suspense, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, IndianRupee, CreditCard, QrCode, Check, Shield, Clock } from "lucide-react"
 import BottomNav from "../../../../components/BottomNav"
 import { formatCurrency } from "../../../../lib/utils"
 
-export default function WalletPayPage() {
+function WalletPayContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const amountParam = searchParams.get("amount")
@@ -154,6 +154,57 @@ export default function WalletPayPage() {
 
       <BottomNav />
     </div>
+  )
+}
+
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-brand-50 via-white to-brand-100 pb-20">
+      {/* Header */}
+      <div className="bg-white/90 backdrop-blur-sm border-b border-slate-200/50 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="w-9 h-9 bg-slate-200 rounded-lg animate-pulse"></div>
+          <h1 className="text-xl font-bold text-slate-800">Pay Dues</h1>
+          <div className="w-5" />
+        </div>
+      </div>
+
+      <div className="p-6 space-y-6">
+        {/* Amount Loading */}
+        <div className="partner-card p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-slate-600">Amount to Pay</p>
+              <div className="w-32 h-8 bg-slate-200 rounded mt-1 animate-pulse"></div>
+            </div>
+            <div className="w-32 h-10 bg-slate-200 rounded-xl animate-pulse"></div>
+          </div>
+        </div>
+
+        {/* Methods Loading */}
+        <div className="partner-card p-6">
+          <div className="w-48 h-6 bg-slate-200 rounded animate-pulse mb-4"></div>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="w-full h-12 bg-slate-200 rounded-lg animate-pulse"></div>
+            <div className="w-full h-12 bg-slate-200 rounded-lg animate-pulse"></div>
+          </div>
+          <div className="space-y-3">
+            <div className="w-24 h-4 bg-slate-200 rounded animate-pulse"></div>
+            <div className="w-full h-10 bg-slate-200 rounded-lg animate-pulse"></div>
+          </div>
+        </div>
+      </div>
+
+      <BottomNav />
+    </div>
+  )
+}
+
+export default function WalletPayPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <WalletPayContent />
+    </Suspense>
   )
 }
 
