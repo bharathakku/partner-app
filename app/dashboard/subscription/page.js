@@ -76,24 +76,24 @@ export default function SubscriptionPage() {
                 </div>
               )}
               
-              <div className="flex items-center justify-between mb-4">
-                <div>
+              <div className="flex items-start justify-between mb-4 pr-10">
+                <div className="flex-1">
                   <h3 className="text-xl font-bold text-slate-800">{plan.name}</h3>
                   <p className="text-sm text-slate-600">{plan.description}</p>
                 </div>
-                <div className="text-right">
-                  <div className="text-3xl font-bold text-brand-600 flex items-center">
-                    <IndianRupee className="w-6 h-6" />
+                <div className="text-right ml-4 flex-shrink-0 max-w-[100px]">
+                  <div className="text-xl font-bold text-brand-600 flex items-center justify-end">
+                    <IndianRupee className="w-4 h-4" />
                     {plan.price}
                   </div>
-                  <div className="text-sm text-slate-500">per {plan.duration === 1 ? plan.durationType : `${plan.duration} ${plan.durationType}s`}</div>
+                  <div className="text-xs text-slate-500 whitespace-nowrap">per {plan.duration === 1 ? plan.durationType : `${plan.duration} ${plan.durationType}s`}</div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 mb-4">
+              <div className="space-y-2 mb-4">
                 {plan.features.map((feature, idx) => (
                   <div key={idx} className="flex items-center gap-2 text-sm text-slate-700">
-                    <Check className="w-4 h-4 text-success-600" />
+                    <Check className="w-4 h-4 text-success-600 flex-shrink-0" />
                     <span>{feature}</span>
                   </div>
                 ))}
