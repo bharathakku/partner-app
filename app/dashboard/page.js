@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Bell, Star, TrendingUp, Clock, IndianRupee, Package } from "lucide-react"
+import { Bell, Star, TrendingUp, Clock, IndianRupee, Package, CreditCard, X, Zap } from "lucide-react"
 import OnlineToggle from "../../components/OnlineToggle"
 import BottomNav from "../../components/BottomNav"
 import { getGreeting, formatCurrency } from "../../lib/utils"
@@ -38,6 +38,11 @@ export default function Dashboard() {
   const [currentOrderPopup, setCurrentOrderPopup] = useState(null)
   const [simulationActive, setSimulationActive] = useState(false)
   const [remainingTime, setRemainingTime] = useState(30)
+  
+  // Recharge popup state
+  const [showRechargePopup, setShowRechargePopup] = useState(false)
+  const [rechargeAmount, setRechargeAmount] = useState('')
+  const [isRecharging, setIsRecharging] = useState(false)
 
   // Redirect if there's already an active order
   useEffect(() => {
@@ -169,6 +174,42 @@ export default function Dashboard() {
 
   const handleStatusChange = (isOnline) => {
     setPartnerData(prev => ({ ...prev, isOnline }))
+  }
+  
+  // Show recharge popup on dashboard load
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowRechargePopup(true)
+    }, 2000)
+    
+    return () => clearTimeout(timer)
+  }, [])
+  
+  const handleRecharge = async () => {
+    if (!rechargeAmount || parseFloat(rechargeAmount) < 10) {
+      alert('Please enter a minimum amount of ₹10')
+      return
+    }
+    
+    setIsRecharging(true)
+    
+    try {
+      // Simulate payment processing
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      
+      alert(`Successfully recharged ₹${rechargeAmount} to your wallet!`)
+      setShowRechargePopup(false)
+      setRechargeAmount('')
+    } catch (error) {
+      alert('Recharge failed. Please try again.')
+    } finally {
+      setIsRecharging(false)
+    }
+  }
+  
+  const closeRechargePopup = () => {
+    setShowRechargePopup(false)
+    setRechargeAmount('')
   }
 
   return (
@@ -403,6 +444,98 @@ export default function Dashboard() {
               >
                 Accept Order
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Recharge Popup */}
+      {showRechargePopup && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full mx-4 transform animate-pulse-scale">
+            {/* Header */}
+            <div className="p-4 rounded-t-2xl flex justify-between items-center bg-gradient-to-r from-brand-500 to-brand-600">
+              <div className="text-white">
+                <h2 className="font-bold text-lg flex items-center gap-2">
+                  <Zap className="w-5 h-5" />
+                  Quick Recharge
+                </h2>
+                <p className="text-sm opacity-90">Add money to start earning</p>
+              </div>
+              <button
+                onClick={closeRechargePopup}
+                className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Recharge Form */}
+            <div className="p-6 space-y-4">
+              <div className="text-center mb-4">
+                <p className="text-slate-600">Recharge your wallet to start accepting orders</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Recharge Amount
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <IndianRupee className="w-4 h-4 text-slate-400" />
+                  </div>
+                  <input
+                    type="number"
+                    value={rechargeAmount}
+                    onChange={(e) => setRechargeAmount(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:border-brand-500 focus:outline-none text-center text-lg font-semibold transition-colors"
+                    placeholder="Enter amount"
+                    min="10"
+                    step="1"
+                  />
+                </div>
+                <p className="text-xs text-slate-500 mt-1">Minimum amount: ₹10</p>
+              </div>
+              
+              {/* Quick Amount Buttons */}
+              <div className="grid grid-cols-3 gap-2">
+                {[50, 100, 200].map(amount => (
+                  <button
+                    key={amount}
+                    onClick={() => setRechargeAmount(amount.toString())}
+                    className="py-2 px-3 border border-slate-200 rounded-lg text-sm font-semibold hover:bg-brand-50 hover:border-brand-300 transition-colors"
+                  >
+                    ₹{amount}
+                  </button>
+                ))}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={closeRechargePopup}
+                  className="flex-1 py-3 px-4 bg-slate-200 text-slate-700 rounded-xl font-semibold hover:bg-slate-300 transition-colors"
+                >
+                  Later
+                </button>
+                <button
+                  onClick={handleRecharge}
+                  disabled={isRecharging || !rechargeAmount}
+                  className="flex-1 py-3 px-4 text-white rounded-xl font-semibold transition-colors bg-brand-500 hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isRecharging ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="w-4 h-4" />
+                      Recharge Now
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
