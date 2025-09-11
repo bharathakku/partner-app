@@ -16,7 +16,7 @@ export default function NotificationsPage() {
       type: "payment",
       title: "Payment Received",
       message: "Your weekly earnings of ₹4,200 have been credited to your account",
-      timestamp: "2024-01-10T10:30:00Z",
+      timestamp: "2025-09-11T10:30:00Z",
       read: false,
       action: "View Details"
     },
@@ -25,7 +25,7 @@ export default function NotificationsPage() {
       type: "order",
       title: "New Delivery Request",
       message: "You have a new delivery request from Restaurant ABC to Sector 15",
-      timestamp: "2024-01-10T09:45:00Z",
+      timestamp: "2025-09-11T09:45:00Z",
       read: true,
       action: "Accept Order"
     },
@@ -34,7 +34,7 @@ export default function NotificationsPage() {
       type: "rating",
       title: "Great Rating Received!",
       message: "Customer rated you 5 stars for your excellent service. Keep it up!",
-      timestamp: "2024-01-10T08:20:00Z",
+      timestamp: "2025-09-11T08:20:00Z",
       read: false,
       action: "View Rating"
     },
@@ -43,7 +43,7 @@ export default function NotificationsPage() {
       type: "incentive",
       title: "Bonus Achieved!",
       message: "Congratulations! You've completed the Weekend Bonus challenge and earned ₹500",
-      timestamp: "2024-01-09T20:15:00Z",
+      timestamp: "2025-09-10T20:15:00Z",
       read: false,
       action: "Claim Bonus"
     },
@@ -52,7 +52,7 @@ export default function NotificationsPage() {
       type: "system",
       title: "App Update Available",
       message: "A new version of the app is available with improved features and bug fixes",
-      timestamp: "2024-01-09T14:30:00Z",
+      timestamp: "2025-09-10T14:30:00Z",
       read: true,
       action: "Update Now"
     },
@@ -61,7 +61,7 @@ export default function NotificationsPage() {
       type: "payment_due",
       title: "Payment Reminder",
       message: "You have pending platform charges of ₹210. Please clear your dues",
-      timestamp: "2024-01-09T12:00:00Z",
+      timestamp: "2025-09-10T12:00:00Z",
       read: true,
       action: "Pay Now"
     },
@@ -70,7 +70,7 @@ export default function NotificationsPage() {
       type: "order",
       title: "Order Completed",
       message: "Order #ORD123456 has been successfully delivered. Earned ₹85",
-      timestamp: "2024-01-08T19:45:00Z",
+      timestamp: "2025-09-09T19:45:00Z",
       read: true,
       action: "View Details"
     },
@@ -79,7 +79,7 @@ export default function NotificationsPage() {
       type: "system",
       title: "Weekly Report Ready",
       message: "Your weekly performance report is now available for download",
-      timestamp: "2024-01-08T09:00:00Z",
+      timestamp: "2025-09-09T09:00:00Z",
       read: true,
       action: "Download"
     }

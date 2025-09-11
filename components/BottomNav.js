@@ -1,12 +1,12 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, Wallet, Settings, Gift, Bell, Truck } from "lucide-react"
+import { Home, Crown, Settings, Gift, Bell, Truck } from "lucide-react"
 import { cn } from "../lib/utils"
 
 const navItems = [
   { href: "/dashboard", icon: Home, label: "Home" },
   { href: "/orders", icon: Truck, label: "Orders" },
-  { href: "/dashboard/wallet", icon: Wallet, label: "Wallet" },
+  { href: "/dashboard/wallet", icon: Crown, label: "Subscription" },
   { href: "/dashboard/incentives", icon: Gift, label: "Incentives" },
   { href: "/dashboard/settings", icon: Settings, label: "Settings" },
 ]

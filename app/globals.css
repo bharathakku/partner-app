@@ -32,7 +32,7 @@
 }
 
 @layer components {
-  /* Premium Partner App Components */
+  /* Partner App Components */
   .partner-card {
     @apply bg-white/95 backdrop-blur-sm border border-slate-200/50 rounded-2xl shadow-premium;
   }
@@ -61,11 +61,11 @@
     @apply flex h-12 w-full rounded-xl border border-slate-200/60 bg-white/90 backdrop-blur-sm px-4 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:border-brand-400 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200;
   }
 
-  .premium-card {
+  .feature-card {
     @apply bg-gradient-to-br from-white via-white to-slate-50/30 border border-slate-200/50 rounded-2xl shadow-premium backdrop-blur-sm;
   }
 
-  .premium-badge {
+  .feature-badge {
     @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border backdrop-blur-sm;
   }
 
@@ -78,11 +78,11 @@
   }
 
   .earnings-card {
-    @apply premium-card p-6 bg-gradient-to-br from-success-50 via-white to-success-50/30 border-success-200/50;
+    @apply feature-card p-6 bg-gradient-to-br from-success-50 via-white to-success-50/30 border-success-200/50;
   }
 
   .payment-due {
-    @apply premium-card bg-gradient-to-br from-warning-50 via-white to-warning-50/30 border-warning-200/50 text-warning-800;
+    @apply feature-card bg-gradient-to-br from-warning-50 via-white to-warning-50/30 border-warning-200/50 text-warning-800;
   }
 
   .mobile-safe-area {
@@ -93,16 +93,16 @@
     @apply fixed bottom-6 right-6 bg-gradient-to-r from-brand-500 to-brand-600 text-white p-4 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 z-50;
   }
 
-  .premium-header {
+  .app-header {
     @apply bg-white/95 backdrop-blur-xl border-b border-slate-200/50 shadow-sm;
   }
 
-  .premium-footer {
+  .app-footer {
     @apply bg-white/80 backdrop-blur-xl border-t border-slate-200/60 shadow-2xl;
     position: relative;
   }
 
-  .premium-footer::before {
+  .app-footer::before {
     content: '';
     position: absolute;
     top: 0;

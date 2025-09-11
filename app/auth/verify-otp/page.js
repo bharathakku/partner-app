@@ -13,17 +13,22 @@ export default function VerifyOTP() {
   const [resendTimer, setResendTimer] = useState(30)
   const [canResend, setCanResend] = useState(false)
   const [phone, setPhone] = useState("")
+  const [authMode, setAuthMode] = useState("login")
   const inputRefs = useRef([])
   const router = useRouter()
 
   useEffect(() => {
-    // Get phone number from localStorage
+    // Get phone number and auth mode from localStorage
     const storedPhone = localStorage.getItem("partner_phone")
+    const storedAuthMode = localStorage.getItem("auth_mode") || "login"
+    
     if (!storedPhone) {
       router.push("/auth/phone")
       return
     }
+    
     setPhone(storedPhone)
+    setAuthMode(storedAuthMode)
 
     // Start countdown timer
     const timer = setInterval(() => {
@@ -81,12 +86,12 @@ export default function VerifyOTP() {
       
       // For demo purposes, accept any 6-digit code
       if (otpCode.length === 6) {
-        // Check if user exists (simulate)
-        const isExistingUser = Math.random() > 0.7 // 30% chance of being new user
-        
-        if (isExistingUser) {
-          // Existing user - check activation status
-          const isActivated = Math.random() > 0.5 // 50% chance of being activated
+        if (authMode === "signup") {
+          // New user signup - always go to KYC
+          router.push("/auth/kyc")
+        } else {
+          // Existing user login - check activation status
+          const isActivated = Math.random() > 0.3 // 70% chance of being activated
           
           if (isActivated) {
             localStorage.setItem("partner_authenticated", "true")
@@ -94,9 +99,6 @@ export default function VerifyOTP() {
           } else {
             router.push("/auth/activation-pending")
           }
-        } else {
-          // New user - go to KYC
-          router.push("/auth/kyc")
         }
       } else {
         setError("Invalid verification code")
@@ -162,10 +164,13 @@ export default function VerifyOTP() {
           </div>
           
           <h2 className="text-2xl font-bold text-slate-800 mb-3">
-            Enter Verification Code
+            {authMode === "signup" ? "Complete Account Creation" : "Verify Login"}
           </h2>
           <p className="text-slate-600 leading-relaxed mb-2">
-            We've sent a 6-digit code to
+            {authMode === "signup" 
+              ? "Enter the verification code sent to"
+              : "We've sent a login code to"
+            }
           </p>
           <p className="text-brand-600 font-semibold text-lg">
             +91 {formatPhoneNumber(phone)}

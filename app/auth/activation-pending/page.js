@@ -3,15 +3,29 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Clock, CheckCircle, Phone, MessageCircle, RefreshCw, AlertCircle } from "lucide-react"
+import { Clock, CheckCircle, Phone, MessageCircle, RefreshCw, AlertCircle, IndianRupee, Package, Truck } from "lucide-react"
+import { formatRegistrationFee, getVehicleTypeById } from "../../../lib/registration"
 
 export default function ActivationPending() {
   const [timeRemaining, setTimeRemaining] = useState("")
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [activationStatus, setActivationStatus] = useState("pending")
+  const [registrationData, setRegistrationData] = useState(null)
   const router = useRouter()
 
   useEffect(() => {
+    // Load registration data from localStorage
+    if (typeof window !== 'undefined') {
+      const storedData = localStorage.getItem('partner_registration')
+      if (storedData) {
+        try {
+          setRegistrationData(JSON.parse(storedData))
+        } catch (e) {
+          console.error('Error parsing registration data:', e)
+        }
+      }
+    }
+    
     // Simulate activation time (24-48 hours)
     const activationTime = new Date()
     activationTime.setHours(activationTime.getHours() + 36) // 36 hours from now
@@ -163,6 +177,47 @@ export default function ActivationPending() {
           )}
         </div>
 
+        {/* Registration Summary */}
+        {registrationData && (
+          <div className="bg-white/90 backdrop-blur-sm border border-slate-200/50 rounded-xl p-6 mb-6 text-left">
+            <h3 className="font-semibold text-slate-800 mb-4">Registration Summary</h3>
+            
+            <div className="flex items-center gap-4 mb-4 p-3 bg-success-50 rounded-lg border border-success-200">
+              <div className="w-12 h-12 bg-success-500 rounded-xl flex items-center justify-center">
+                <IndianRupee className="w-6 h-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <p className="font-medium text-success-800">Registration Fee Paid</p>
+                <p className="text-sm text-success-700">
+                  {formatRegistrationFee(registrationData.registrationFee?.amount || 0)} - Payment ID: {registrationData.registrationFee?.paymentId}
+                </p>
+              </div>
+              <CheckCircle className="w-5 h-5 text-success-600" />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <p className="text-xs text-slate-600 mb-1">Vehicle Type</p>
+                <p className="font-medium text-slate-800">
+                  {getVehicleTypeById(registrationData.vehicleType)?.icon} {getVehicleTypeById(registrationData.vehicleType)?.name}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-600 mb-1">Vehicle Number</p>
+                <p className="font-medium text-slate-800">{registrationData.vehicleNumber}</p>
+              </div>
+            </div>
+            
+            <div className="border-t border-slate-200 pt-4">
+              <p className="text-sm text-slate-600 mb-2">Delivery Kit Status:</p>
+              <div className="flex items-center gap-2">
+                <Package className="w-4 h-4 text-warning-600" />
+                <span className="text-sm text-warning-700 font-medium">Kit will be delivered within 2-3 business days</span>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* Information Cards */}
         <div className="space-y-4 mb-8">
           <div className="bg-white/80 backdrop-blur-sm border border-slate-200/50 rounded-xl p-4 text-left">
@@ -172,7 +227,7 @@ export default function ActivationPending() {
               </div>
               <div>
                 <h3 className="font-semibold text-slate-800 mb-1">Documents Submitted</h3>
-                <p className="text-sm text-slate-600">All required documents have been received</p>
+                <p className="text-sm text-slate-600">All required documents and vehicle photo received</p>
               </div>
             </div>
           </div>
@@ -192,11 +247,11 @@ export default function ActivationPending() {
           <div className="bg-white/80 backdrop-blur-sm border border-slate-200/50 rounded-xl p-4 text-left">
             <div className="flex items-start space-x-3">
               <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                <AlertCircle className="w-4 h-4 text-slate-500" />
+                <Truck className="w-4 h-4 text-slate-500" />
               </div>
               <div>
-                <h3 className="font-semibold text-slate-800 mb-1">Account Activation</h3>
-                <p className="text-sm text-slate-600">Will be completed once verification is done</p>
+                <h3 className="font-semibold text-slate-800 mb-1">Delivery Kit Dispatch</h3>
+                <p className="text-sm text-slate-600">Will be sent once account is activated</p>
               </div>
             </div>
           </div>

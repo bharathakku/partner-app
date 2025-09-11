@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Phone, Loader2, AlertCircle } from "lucide-react"
@@ -10,7 +10,14 @@ export default function PhoneVerification() {
   const [phone, setPhone] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [authMode, setAuthMode] = useState("login")
   const router = useRouter()
+  
+  useEffect(() => {
+    // Check if this is a login or signup flow
+    const mode = localStorage.getItem("auth_mode") || "login"
+    setAuthMode(mode)
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -34,6 +41,7 @@ export default function PhoneVerification() {
       
       // Store phone number for next steps
       localStorage.setItem("partner_phone", phone.replace(/\s/g, ""))
+      localStorage.setItem("auth_mode", authMode)
       
       // Navigate to OTP verification
       router.push("/auth/verify-otp")
@@ -71,10 +79,20 @@ export default function PhoneVerification() {
           </div>
           
           <h2 className="text-2xl font-bold text-slate-800 mb-3">
-            Enter Your Phone Number
+            {authMode === "signup" 
+              ? "Create Partner Account" 
+              : authMode === "reset"
+                ? "Reset Password"
+                : "Partner Login"
+            }
           </h2>
           <p className="text-slate-600 leading-relaxed">
-            We'll send you a verification code to confirm your number
+            {authMode === "signup" 
+              ? "Enter your mobile number to create your partner account"
+              : authMode === "reset"
+                ? "Enter your registered mobile number to reset password"
+                : "Enter your registered mobile number to login"
+            }
           </p>
         </div>
 
@@ -118,15 +136,28 @@ export default function PhoneVerification() {
                 <span>Sending OTP...</span>
               </div>
             ) : (
-              "Send Verification Code"
+              authMode === "signup" 
+                ? "Send OTP & Create Account" 
+                : authMode === "reset"
+                  ? "Send Reset Code"
+                  : "Send Login OTP"
             )}
           </button>
         </form>
 
         <div className="text-center mt-8">
-          <p className="text-sm text-slate-600">
-            By proceeding, you agree to receive SMS messages from us
-          </p>
+          {authMode === "signup" ? (
+            <p className="text-sm text-slate-600">
+              By proceeding, you agree to receive SMS messages from us
+            </p>
+          ) : (
+            <p className="text-sm text-slate-600">
+              Don't have an account?{" "}
+              <Link href="/" className="text-brand-600 font-semibold hover:underline">
+                Sign Up
+              </Link>
+            </p>
+          )}
         </div>
       </div>
 

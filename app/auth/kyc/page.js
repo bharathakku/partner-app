@@ -1,9 +1,21 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, User, FileText, Camera, Upload, Loader2, AlertCircle, CheckCircle } from "lucide-react"
+import { ArrowLeft, User, FileText, Camera, Upload, Loader2, AlertCircle, CheckCircle, Car, IndianRupee, Package, Shirt } from "lucide-react"
 import Link from "next/link"
+import { formatCurrency } from "../../../lib/utils"
+import { 
+  VEHICLE_TYPES, 
+  getVehicleTypesArray, 
+  getVehicleTypeById, 
+  calculateRegistrationFee, 
+  getRegistrationIncludes, 
+  isTwoWheeler, 
+  validateVehicleNumber, 
+  formatVehicleNumber,
+  formatRegistrationFee
+} from "../../../lib/registration"
 
 export default function KYCVerification() {
   const [formData, setFormData] = useState({
@@ -13,17 +25,27 @@ export default function KYCVerification() {
     panNumber: "",
     drivingLicense: "",
     vehicleNumber: "",
-    vehicleType: "bike"
+    vehicleType: "bike",
+    tshirtSize: ""
   })
   const [documents, setDocuments] = useState({
     aadhar: null,
     pan: null,
     drivingLicense: null,
-    vehicleRC: null
+    vehicleRC: null,
+    vehiclePicture: null
   })
+  const [registrationFee, setRegistrationFee] = useState(1000)
+  const [vehicleTypes] = useState(getVehicleTypesArray())
   const [isLoading, setIsLoading] = useState(false)
   const [errors, setErrors] = useState({})
   const [currentStep, setCurrentStep] = useState(1)
+  
+  // Update registration fee when vehicle type changes
+  useEffect(() => {
+    const fee = calculateRegistrationFee(formData.vehicleType)
+    setRegistrationFee(fee)
+  }, [formData.vehicleType])
   const router = useRouter()
 
   const validateStep1 = () => {
@@ -64,6 +86,33 @@ export default function KYCVerification() {
     
     if (!formData.vehicleNumber.trim()) {
       newErrors.vehicleNumber = "Vehicle number is required"
+    } else if (!validateVehicleNumber(formData.vehicleNumber)) {
+      newErrors.vehicleNumber = "Please enter a valid vehicle number (e.g., KA05AB1234)"
+    }
+    
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+  
+  const validateStep3 = () => {
+    const newErrors = {}
+    
+    const requiredDocs = ['aadhar', 'pan', 'drivingLicense', 'vehicleRC', 'vehiclePicture']
+    requiredDocs.forEach(doc => {
+      if (!documents[doc]) {
+        newErrors[doc] = `${doc === 'vehiclePicture' ? 'Vehicle picture' : doc} is required`
+      }
+    })
+    
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+  
+  const validateStep4 = () => {
+    const newErrors = {}
+    
+    if (!formData.tshirtSize) {
+      newErrors.tshirtSize = "Please select your t-shirt size"
     }
     
     setErrors(newErrors)
@@ -92,25 +141,49 @@ export default function KYCVerification() {
     }
   }
 
+  const handleVehicleNumberChange = (value) => {
+    const formattedValue = formatVehicleNumber(value)
+    handleInputChange("vehicleNumber", formattedValue)
+  }
+
   const handleNextStep = () => {
     if (currentStep === 1 && validateStep1()) {
       setCurrentStep(2)
     } else if (currentStep === 2 && validateStep2()) {
       setCurrentStep(3)
+    } else if (currentStep === 3 && validateStep3()) {
+      setCurrentStep(4) // T-shirt size selection
+    } else if (currentStep === 4 && validateStep4()) {
+      setCurrentStep(5) // Registration fee step
     }
   }
 
-  const handleSubmit = async () => {
+  const handleRegistrationPayment = async () => {
     setIsLoading(true)
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 3000))
+      // Simulate payment processing
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      
+      // Store registration data
+      const registrationData = {
+        ...formData,
+        documents,
+        registrationFee: {
+          amount: registrationFee,
+          paid: true,
+          paymentId: `REG_${Date.now()}`
+        },
+        registrationDate: new Date().toISOString(),
+        tshirtSize: formData.tshirtSize
+      }
+      
+      localStorage.setItem('partner_registration', JSON.stringify(registrationData))
       
       // Navigate to activation pending
       router.push("/auth/activation-pending")
     } catch (err) {
-      setErrors({ submit: "Failed to submit KYC. Please try again." })
+      setErrors({ submit: "Failed to process registration payment. Please try again." })
     } finally {
       setIsLoading(false)
     }
@@ -129,7 +202,7 @@ export default function KYCVerification() {
 
       {/* Progress Steps */}
       <div className="flex items-center justify-center mb-8">
-        {[1, 2, 3].map((step) => (
+        {[1, 2, 3, 4, 5].map((step) => (
           <div key={step} className="flex items-center">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
               step <= currentStep 
@@ -138,8 +211,8 @@ export default function KYCVerification() {
             }`}>
               {step < currentStep ? <CheckCircle className="w-5 h-5" /> : step}
             </div>
-            {step < 3 && (
-              <div className={`w-16 h-1 mx-2 ${
+            {step < 5 && (
+              <div className={`w-12 h-1 mx-2 ${
                 step < currentStep ? "bg-brand-500" : "bg-slate-200"
               }`} />
             )}
@@ -254,16 +327,38 @@ export default function KYCVerification() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Vehicle Type</label>
-                <select
-                  value={formData.vehicleType}
-                  onChange={(e) => handleInputChange("vehicleType", e.target.value)}
-                  className="partner-input"
-                >
-                  <option value="bike">Motorcycle</option>
-                  <option value="scooter">Scooter</option>
-                  <option value="car">Car</option>
-                  <option value="van">Van</option>
-                </select>
+                <div className="grid grid-cols-2 gap-3">
+                  {vehicleTypes.map((vehicle) => (
+                    <div
+                      key={vehicle.id}
+                      onClick={() => handleInputChange("vehicleType", vehicle.id)}
+                      className={`p-3 border-2 rounded-xl cursor-pointer transition-all ${
+                        formData.vehicleType === vehicle.id
+                          ? 'border-brand-500 bg-brand-50'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="text-center">
+                        <div className="text-2xl mb-1">{vehicle.icon}</div>
+                        <div className="text-sm font-semibold text-slate-800">{vehicle.name}</div>
+                        <div className="text-xs text-slate-600">{formatRegistrationFee(vehicle.registrationFee)}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Selected Vehicle Fee Info */}
+                {formData.vehicleType && (
+                  <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-slate-700">Registration Fee:</span>
+                      <span className="text-lg font-bold text-brand-700">{formatRegistrationFee(registrationFee)}</span>
+                    </div>
+                    <div className="text-xs text-slate-600">
+                      <strong>Includes:</strong> {getRegistrationIncludes(formData.vehicleType).join(', ')}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -288,10 +383,14 @@ export default function KYCVerification() {
                 <input
                   type="text"
                   value={formData.vehicleNumber}
-                  onChange={(e) => handleInputChange("vehicleNumber", e.target.value.toUpperCase())}
+                  onChange={(e) => handleVehicleNumberChange(e.target.value)}
                   className="partner-input text-center font-mono tracking-wider"
-                  placeholder="XX 00 XX 0000"
+                  placeholder="KA 05 AB 1234"
+                  maxLength="13"
                 />
+                <div className="mt-1 text-xs text-slate-500">
+                  Enter your vehicle number as shown on RC (e.g., KA05AB1234)
+                </div>
                 {errors.vehicleNumber && (
                   <div className="mt-1 flex items-center space-x-2 text-error-600">
                     <AlertCircle className="w-4 h-4" />
@@ -334,7 +433,8 @@ export default function KYCVerification() {
                 { key: "aadhar", label: "Aadhar Card", required: true },
                 { key: "pan", label: "PAN Card", required: true },
                 { key: "drivingLicense", label: "Driving License", required: true },
-                { key: "vehicleRC", label: "Vehicle RC", required: true }
+                { key: "vehicleRC", label: "Vehicle RC", required: true },
+                { key: "vehiclePicture", label: "Vehicle Picture", required: true }
               ].map((doc) => (
                 <div key={doc.key} className="border-2 border-dashed border-slate-300 rounded-xl p-4">
                   <label className="block cursor-pointer">
@@ -378,17 +478,153 @@ export default function KYCVerification() {
                 Back
               </button>
               <button
-                onClick={handleSubmit}
-                disabled={isLoading || Object.keys(documents).some(key => !documents[key])}
+                onClick={handleNextStep}
+                disabled={Object.keys(documents).some(key => !documents[key])}
+                className="partner-button-primary flex-1 py-4 text-base font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Continue to Payment
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {/* Step 4: T-shirt Size Selection */}
+        {currentStep === 4 && (
+          <div className="space-y-6">
+            <div className="text-center mb-8">
+              <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Shirt className="w-8 h-8 text-brand-600" />
+              </div>
+              <h2 className="text-xl font-bold text-slate-800 mb-2">Select T-shirt Size</h2>
+              <p className="text-slate-600">Choose your uniform size before payment</p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              {["S","M","L","XL","XXL","XXXL"].map(size => (
+                <button
+                  type="button"
+                  key={size}
+                  onClick={() => handleInputChange("tshirtSize", size)}
+                  className={`p-4 border-2 rounded-xl font-semibold ${
+                    formData.tshirtSize === size ? 'border-brand-500 bg-brand-50' : 'border-slate-200 bg-white hover:border-slate-300'
+                  }`}
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
+
+            {errors.tshirtSize && (
+              <div className="flex items-center space-x-2 text-error-600">
+                <AlertCircle className="w-4 h-4" />
+                <span className="text-sm">{errors.tshirtSize}</span>
+              </div>
+            )}
+
+            <div className="flex space-x-4 mt-8">
+              <button
+                onClick={() => setCurrentStep(3)}
+                className="partner-button-secondary flex-1 py-4 text-base font-semibold"
+              >
+                Back
+              </button>
+              <button
+                onClick={handleNextStep}
+                className="partner-button-primary flex-1 py-4 text-base font-semibold"
+              >
+                Continue to Payment
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 5: Registration Fee Payment */}
+        {currentStep === 5 && (
+          <div className="space-y-6">
+            <div className="text-center mb-8">
+              <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <IndianRupee className="w-8 h-8 text-brand-600" />
+              </div>
+              <h2 className="text-xl font-bold text-slate-800 mb-2">Registration Fee</h2>
+              <p className="text-slate-600">Complete your partner registration</p>
+            </div>
+            
+            {/* Fee Breakdown */}
+            <div className="bg-white border border-slate-200 rounded-xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="text-2xl">{getVehicleTypeById(formData.vehicleType)?.icon}</div>
+                  <div>
+                    <h3 className="font-semibold text-slate-800">{getVehicleTypeById(formData.vehicleType)?.name}</h3>
+                    <p className="text-sm text-slate-600">{getVehicleTypeById(formData.vehicleType)?.description}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-brand-700">{formatRegistrationFee(registrationFee)}</div>
+                  <div className="text-xs text-slate-500">One-time fee</div>
+                </div>
+              </div>
+              
+              <div className="border-t border-slate-200 pt-4">
+                <h4 className="font-semibold text-slate-800 mb-3">Registration Package Includes:</h4>
+                <div className="space-y-2">
+                  {getRegistrationIncludes(formData.vehicleType).map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-success-100 rounded-lg flex items-center justify-center">
+                        {item.includes('bag') ? <Package className="w-4 h-4 text-success-600" /> : <Shirt className="w-4 h-4 text-success-600" />}
+                      </div>
+                      <div>
+                        <p className="font-medium text-slate-800">{item}</p>
+                        <p className="text-xs text-slate-600">
+                          {item.includes('bag') ? 'Insulated delivery bag for food items' : 'Official partner uniform with branding'}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              {isTwoWheeler(formData.vehicleType) ? (
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-sm text-blue-800">
+                    <strong>Two-wheeler package:</strong> Includes both delivery bag and uniform for optimal delivery experience.
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                  <p className="text-sm text-green-800">
+                    <strong>Multi-wheeler package:</strong> No delivery bag needed - more space, lower fee!
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            {errors.submit && (
+              <div className="flex items-center space-x-2 text-error-600">
+                <AlertCircle className="w-4 h-4" />
+                <span className="text-sm">{errors.submit}</span>
+              </div>
+            )}
+            
+            <div className="flex space-x-4 mt-8">
+              <button
+                onClick={() => setCurrentStep(4)}
+                className="partner-button-secondary flex-1 py-4 text-base font-semibold"
+              >
+                Back
+              </button>
+              <button
+                onClick={handleRegistrationPayment}
+                disabled={isLoading}
                 className="partner-button-primary flex-1 py-4 text-base font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <div className="flex items-center justify-center space-x-2">
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>Submitting...</span>
+                    <span>Processing...</span>
                   </div>
                 ) : (
-                  "Submit KYC"
+                  `Pay ${formatRegistrationFee(registrationFee)} & Complete`
                 )}
               </button>
             </div>
