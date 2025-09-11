@@ -58,7 +58,7 @@ function SubscriptionPayContent() {
       }
     }
     alert(`Successfully subscribed to ${plan?.name} for ${formatCurrency(amount)} via ${method.toUpperCase()}`)
-    router.push("/dashboard/wallet")
+    router.push("/dashboard/subscription")
   }
 
   if (!plan) {

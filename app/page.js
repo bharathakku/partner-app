@@ -185,10 +185,13 @@ export default function Welcome() {
               className="partner-button-primary w-full py-5 text-lg font-bold shadow-xl hover:shadow-2xl relative overflow-hidden group"
             >
               <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 transform -skew-x-12 translate-x-full group-hover:animate-pulse"></div>
-              <div className="relative flex items-center justify-center space-x-3">
-                <Phone className="w-6 h-6" />
-                <span>Start Earning Today</span>
-                <ArrowRight className="w-5 h-5" />
+              <div className="relative flex flex-col items-center justify-center space-y-1">
+                <div className="flex items-center space-x-2">
+                  <Phone className="w-5 h-5" />
+                  <span>Sign Up New User</span>
+                  <ArrowRight className="w-4 h-4" />
+                </div>
+                <span className="text-sm opacity-90">Start earning today</span>
               </div>
             </button>
             
@@ -197,9 +200,12 @@ export default function Welcome() {
               onClick={handleLogin}
               className="w-full py-4 px-6 border-2 border-brand-200 bg-white/80 backdrop-blur-sm text-brand-700 font-semibold rounded-xl hover:bg-brand-50 hover:border-brand-300 transition-all duration-300 shadow-sm hover:shadow-md"
             >
-              <div className="flex items-center justify-center space-x-2">
-                <Package className="w-5 h-5" />
-                <span>🔐 Partner Login</span>
+              <div className="flex flex-col items-center justify-center space-y-1">
+                <div className="flex items-center space-x-2">
+                  <Package className="w-5 h-5" />
+                  <span>Login Existing Users</span>
+                </div>
+                <span className="text-sm opacity-75">🔐 Partner Login</span>
               </div>
             </button>
           </div>

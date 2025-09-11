@@ -6,7 +6,7 @@ import { cn } from "../lib/utils"
 const navItems = [
   { href: "/dashboard", icon: Home, label: "Home" },
   { href: "/orders", icon: Truck, label: "Orders" },
-  { href: "/dashboard/wallet", icon: Crown, label: "Subscription" },
+  { href: "/dashboard/subscription", icon: Crown, label: "Subscription" },
   { href: "/dashboard/incentives", icon: Gift, label: "Incentives" },
   { href: "/dashboard/settings", icon: Settings, label: "Settings" },
 ]
@@ -19,7 +19,8 @@ export default function BottomNav() {
       <div className="grid grid-cols-5">
         {navItems.map((item) => {
           const Icon = item.icon
-          const isActive = pathname === item.href
+          const isActive = pathname === item.href || 
+            (item.href === "/dashboard/subscription" && pathname.startsWith("/dashboard/subscription"))
           
           return (
             <Link
