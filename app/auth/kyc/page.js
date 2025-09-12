@@ -9,12 +9,8 @@ import {
   VEHICLE_TYPES, 
   getVehicleTypesArray, 
   getVehicleTypeById, 
-  calculateRegistrationFee, 
-  getRegistrationIncludes, 
-  isTwoWheeler, 
   validateVehicleNumber, 
-  formatVehicleNumber,
-  formatRegistrationFee
+  formatVehicleNumber
 } from "../../../lib/registration"
 
 export default function KYCVerification() {
@@ -25,8 +21,7 @@ export default function KYCVerification() {
     panNumber: "",
     drivingLicense: "",
     vehicleNumber: "",
-    vehicleType: "bike",
-    tshirtSize: ""
+    vehicleType: "ace_pickup"
   })
   const [documents, setDocuments] = useState({
     aadhar: null,
@@ -35,17 +30,10 @@ export default function KYCVerification() {
     vehicleRC: null,
     vehiclePicture: null
   })
-  const [registrationFee, setRegistrationFee] = useState(1000)
   const [vehicleTypes] = useState(getVehicleTypesArray())
   const [isLoading, setIsLoading] = useState(false)
   const [errors, setErrors] = useState({})
   const [currentStep, setCurrentStep] = useState(1)
-  
-  // Update registration fee when vehicle type changes
-  useEffect(() => {
-    const fee = calculateRegistrationFee(formData.vehicleType)
-    setRegistrationFee(fee)
-  }, [formData.vehicleType])
   const router = useRouter()
 
   const validateStep1 = () => {
@@ -108,16 +96,6 @@ export default function KYCVerification() {
     return Object.keys(newErrors).length === 0
   }
   
-  const validateStep4 = () => {
-    const newErrors = {}
-    
-    if (!formData.tshirtSize) {
-      newErrors.tshirtSize = "Please select your t-shirt size"
-    }
-    
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -152,30 +130,27 @@ export default function KYCVerification() {
     } else if (currentStep === 2 && validateStep2()) {
       setCurrentStep(3)
     } else if (currentStep === 3 && validateStep3()) {
-      setCurrentStep(4) // T-shirt size selection
-    } else if (currentStep === 4 && validateStep4()) {
-      setCurrentStep(5) // Registration fee step
+      handleRegistrationCompletion() // Go directly to completion
     }
   }
 
-  const handleRegistrationPayment = async () => {
+  const handleRegistrationCompletion = async () => {
     setIsLoading(true)
     
     try {
-      // Simulate payment processing
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      // Simulate quick processing for free registration
+      await new Promise(resolve => setTimeout(resolve, 1000))
       
       // Store registration data
       const registrationData = {
         ...formData,
         documents,
         registrationFee: {
-          amount: registrationFee,
+          amount: 0,
           paid: true,
-          paymentId: `REG_${Date.now()}`
+          paymentId: 'NO_FEE_REQUIRED'
         },
-        registrationDate: new Date().toISOString(),
-        tshirtSize: formData.tshirtSize
+        registrationDate: new Date().toISOString()
       }
       
       localStorage.setItem('partner_registration', JSON.stringify(registrationData))
@@ -183,7 +158,7 @@ export default function KYCVerification() {
       // Navigate to activation pending
       router.push("/auth/activation-pending")
     } catch (err) {
-      setErrors({ submit: "Failed to process registration payment. Please try again." })
+      setErrors({ submit: "Failed to complete registration. Please try again." })
     } finally {
       setIsLoading(false)
     }
@@ -341,24 +316,11 @@ export default function KYCVerification() {
                       <div className="text-center">
                         <div className="text-2xl mb-1">{vehicle.icon}</div>
                         <div className="text-sm font-semibold text-slate-800">{vehicle.name}</div>
-                        <div className="text-xs text-slate-600">{formatRegistrationFee(vehicle.registrationFee)}</div>
+                        <div className="text-xs text-slate-600">{vehicle.description}</div>
                       </div>
                     </div>
                   ))}
                 </div>
-                
-                {/* Selected Vehicle Fee Info */}
-                {formData.vehicleType && (
-                  <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-slate-700">Registration Fee:</span>
-                      <span className="text-lg font-bold text-brand-700">{formatRegistrationFee(registrationFee)}</span>
-                    </div>
-                    <div className="text-xs text-slate-600">
-                      <strong>Includes:</strong> {getRegistrationIncludes(formData.vehicleType).join(', ')}
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div>
@@ -479,152 +441,16 @@ export default function KYCVerification() {
               </button>
               <button
                 onClick={handleNextStep}
-                disabled={Object.keys(documents).some(key => !documents[key])}
-                className="partner-button-primary flex-1 py-4 text-base font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Continue to Payment
-              </button>
-            </div>
-          </div>
-        )}
-        
-        {/* Step 4: T-shirt Size Selection */}
-        {currentStep === 4 && (
-          <div className="space-y-6">
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Shirt className="w-8 h-8 text-brand-600" />
-              </div>
-              <h2 className="text-xl font-bold text-slate-800 mb-2">Select T-shirt Size</h2>
-              <p className="text-slate-600">Choose your uniform size before payment</p>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              {["S","M","L","XL","XXL","XXXL"].map(size => (
-                <button
-                  type="button"
-                  key={size}
-                  onClick={() => handleInputChange("tshirtSize", size)}
-                  className={`p-4 border-2 rounded-xl font-semibold ${
-                    formData.tshirtSize === size ? 'border-brand-500 bg-brand-50' : 'border-slate-200 bg-white hover:border-slate-300'
-                  }`}
-                >
-                  {size}
-                </button>
-              ))}
-            </div>
-
-            {errors.tshirtSize && (
-              <div className="flex items-center space-x-2 text-error-600">
-                <AlertCircle className="w-4 h-4" />
-                <span className="text-sm">{errors.tshirtSize}</span>
-              </div>
-            )}
-
-            <div className="flex space-x-4 mt-8">
-              <button
-                onClick={() => setCurrentStep(3)}
-                className="partner-button-secondary flex-1 py-4 text-base font-semibold"
-              >
-                Back
-              </button>
-              <button
-                onClick={handleNextStep}
-                className="partner-button-primary flex-1 py-4 text-base font-semibold"
-              >
-                Continue to Payment
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 5: Registration Fee Payment */}
-        {currentStep === 5 && (
-          <div className="space-y-6">
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <IndianRupee className="w-8 h-8 text-brand-600" />
-              </div>
-              <h2 className="text-xl font-bold text-slate-800 mb-2">Registration Fee</h2>
-              <p className="text-slate-600">Complete your partner registration</p>
-            </div>
-            
-            {/* Fee Breakdown */}
-            <div className="bg-white border border-slate-200 rounded-xl p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="text-2xl">{getVehicleTypeById(formData.vehicleType)?.icon}</div>
-                  <div>
-                    <h3 className="font-semibold text-slate-800">{getVehicleTypeById(formData.vehicleType)?.name}</h3>
-                    <p className="text-sm text-slate-600">{getVehicleTypeById(formData.vehicleType)?.description}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-bold text-brand-700">{formatRegistrationFee(registrationFee)}</div>
-                  <div className="text-xs text-slate-500">One-time fee</div>
-                </div>
-              </div>
-              
-              <div className="border-t border-slate-200 pt-4">
-                <h4 className="font-semibold text-slate-800 mb-3">Registration Package Includes:</h4>
-                <div className="space-y-2">
-                  {getRegistrationIncludes(formData.vehicleType).map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-success-100 rounded-lg flex items-center justify-center">
-                        {item.includes('bag') ? <Package className="w-4 h-4 text-success-600" /> : <Shirt className="w-4 h-4 text-success-600" />}
-                      </div>
-                      <div>
-                        <p className="font-medium text-slate-800">{item}</p>
-                        <p className="text-xs text-slate-600">
-                          {item.includes('bag') ? 'Insulated delivery bag for food items' : 'Official partner uniform with branding'}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              {isTwoWheeler(formData.vehicleType) ? (
-                <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <p className="text-sm text-blue-800">
-                    <strong>Two-wheeler package:</strong> Includes both delivery bag and uniform for optimal delivery experience.
-                  </p>
-                </div>
-              ) : (
-                <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
-                  <p className="text-sm text-green-800">
-                    <strong>Multi-wheeler package:</strong> No delivery bag needed - more space, lower fee!
-                  </p>
-                </div>
-              )}
-            </div>
-            
-            {errors.submit && (
-              <div className="flex items-center space-x-2 text-error-600">
-                <AlertCircle className="w-4 h-4" />
-                <span className="text-sm">{errors.submit}</span>
-              </div>
-            )}
-            
-            <div className="flex space-x-4 mt-8">
-              <button
-                onClick={() => setCurrentStep(4)}
-                className="partner-button-secondary flex-1 py-4 text-base font-semibold"
-              >
-                Back
-              </button>
-              <button
-                onClick={handleRegistrationPayment}
-                disabled={isLoading}
+                disabled={Object.keys(documents).some(key => !documents[key]) || isLoading}
                 className="partner-button-primary flex-1 py-4 text-base font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <div className="flex items-center justify-center space-x-2">
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>Processing...</span>
+                    <span>Completing...</span>
                   </div>
                 ) : (
-                  `Pay ${formatRegistrationFee(registrationFee)} & Complete`
+                  'Complete Free Registration'
                 )}
               </button>
             </div>

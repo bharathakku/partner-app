@@ -6,8 +6,7 @@ import { useProfile } from "../../contexts/ProfileContext"
 import { 
   ArrowLeft, User, HelpCircle, Users, Bell, FileText, 
   LogOut, ChevronRight, Phone, MessageCircle, Gift, 
-  Shield, Share, Star, Settings as SettingsIcon, AlertCircle,
-  Package, Shirt, Truck
+  Shield, Share, Star, Settings as SettingsIcon, AlertCircle
 } from "lucide-react"
 import BottomNav from "../../../components/BottomNav"
 
@@ -21,22 +20,6 @@ export default function SettingsPage() {
     weeklyReports: true
   })
 
-  // Delivery items tracking
-  const [deliveryItems] = useState({
-    tshirt: {
-      status: "delivered",
-      size: "M",
-      trackingId: "TSH25091101",
-      estimatedDelivery: "2025-09-15",
-      deliveredDate: "2025-09-12"
-    },
-    bag: {
-      status: "in_transit",
-      trackingId: "BAG25091102",
-      estimatedDelivery: "2025-09-14",
-      deliveredDate: null
-    }
-  })
 
   const handleNotificationToggle = (setting) => {
     setNotificationSettings(prev => ({
@@ -53,31 +36,6 @@ export default function SettingsPage() {
     }
   }
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "delivered":
-        return "bg-success-100 text-success-700 border-success-200"
-      case "in_transit":
-        return "bg-brand-100 text-brand-700 border-brand-200"
-      case "pending":
-        return "bg-warning-100 text-warning-700 border-warning-200"
-      default:
-        return "bg-slate-100 text-slate-700 border-slate-200"
-    }
-  }
-
-  const formatStatus = (status) => {
-    switch (status) {
-      case "delivered":
-        return "Delivered"
-      case "in_transit":
-        return "In Transit"
-      case "pending":
-        return "Pending"
-      default:
-        return "Unknown"
-    }
-  }
 
   const shareReferralCode = () => {
     if (navigator.share) {
@@ -126,71 +84,6 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Delivery Tracking Section */}
-        <div className="partner-card p-6">
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-              <Truck className="w-5 h-5 text-orange-600" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-800">Delivery Tracking</h3>
-          </div>
-          
-          <div className="space-y-4">
-            {/* T-shirt Tracking */}
-            <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <Shirt className="w-4 h-4 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">Partner T-shirt (Size: {deliveryItems.tshirt.size})</p>
-                    <p className="text-xs text-slate-600">Tracking ID: {deliveryItems.tshirt.trackingId}</p>
-                  </div>
-                </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(deliveryItems.tshirt.status)}`}>
-                  {formatStatus(deliveryItems.tshirt.status)}
-                </span>
-              </div>
-              <div className="text-xs text-slate-600">
-                {deliveryItems.tshirt.status === "delivered" ? (
-                  <p>✅ Delivered on {new Date(deliveryItems.tshirt.deliveredDate).toLocaleDateString()}</p>
-                ) : (
-                  <p>📦 Expected delivery: {new Date(deliveryItems.tshirt.estimatedDelivery).toLocaleDateString()}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Delivery Bag Tracking */}
-            <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                    <Package className="w-4 h-4 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">Delivery Bag</p>
-                    <p className="text-xs text-slate-600">Tracking ID: {deliveryItems.bag.trackingId}</p>
-                  </div>
-                </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(deliveryItems.bag.status)}`}>
-                  {formatStatus(deliveryItems.bag.status)}
-                </span>
-              </div>
-              <div className="text-xs text-slate-600">
-                {deliveryItems.bag.status === "delivered" ? (
-                  <p>✅ Delivered on {new Date(deliveryItems.bag.deliveredDate).toLocaleDateString()}</p>
-                ) : (
-                  <p>🚛 Expected delivery: {new Date(deliveryItems.bag.estimatedDelivery).toLocaleDateString()}</p>
-                )}
-              </div>
-            </div>
-          </div>
-          
-          <div className="mt-4 text-center">
-            <p className="text-xs text-slate-500">Items will be delivered to your registered address within 3-5 business days</p>
-          </div>
-        </div>
 
         {/* Referral Section */}
         <div className="partner-card p-6">

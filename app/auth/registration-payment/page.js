@@ -26,27 +26,27 @@ function RegistrationPaymentContent() {
     setIsLoading(true)
     
     try {
-      // Simulate payment processing
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      // Simulate quick processing for free registration
+      await new Promise(resolve => setTimeout(resolve, 1000))
       
-      // Store payment success data
+      // Store registration completion data
       if (typeof window !== 'undefined') {
-        const paymentData = {
+        const registrationData = {
           vehicleType,
-          amount,
-          paymentMethod: method,
-          paymentId: `REG_PAY_${Date.now()}`,
-          paidAt: new Date().toISOString(),
-          includes: getRegistrationIncludes(vehicleType)
+          amount: 0,
+          registrationMethod: 'free',
+          registrationId: `FREE_REG_${Date.now()}`,
+          completedAt: new Date().toISOString(),
+          status: 'completed'
         }
         
-        localStorage.setItem('registration_payment', JSON.stringify(paymentData))
+        localStorage.setItem('registration_payment', JSON.stringify(registrationData))
       }
       
-      alert(`Registration fee payment successful! ₹${amount} paid via ${method.toUpperCase()}`)
+      alert('Registration completed successfully! Welcome to DeliveryPro!')
       router.push("/auth/activation-pending")
     } catch (err) {
-      alert("Payment failed. Please try again.")
+      alert("Registration failed. Please try again.")
     } finally {
       setIsLoading(false)
     }
@@ -93,149 +93,93 @@ function RegistrationPaymentContent() {
             </div>
           </div>
           
-          <div className="bg-slate-50 rounded-lg p-4 mb-6">
+          <div className="bg-success-50 rounded-lg p-4 mb-6 border border-success-200">
             <div className="flex justify-between items-center mb-4">
-              <span className="text-slate-600 font-medium">Registration Fee</span>
-              <span className="text-3xl font-bold text-brand-700">{formatRegistrationFee(amount)}</span>
+              <span className="text-success-800 font-medium">Registration Fee</span>
+              <span className="text-3xl font-bold text-success-700">FREE</span>
             </div>
-            <div className="text-sm text-slate-600">
-              One-time registration fee for partner onboarding
+            <div className="text-sm text-success-700">
+              ✓ No registration fee required - Start earning immediately!
             </div>
           </div>
           
           <div className="border-t border-slate-200 pt-4">
-            <h4 className="font-semibold text-slate-800 mb-4">Your Registration Package Includes:</h4>
+            <h4 className="font-semibold text-slate-800 mb-4">What You Get with Free Registration:</h4>
             <div className="space-y-3">
-              {getRegistrationIncludes(vehicleType).map((item, idx) => (
-                <div key={idx} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200">
-                  <div className="w-10 h-10 bg-success-100 rounded-lg flex items-center justify-center">
-                    {item.includes('bag') ? <Package className="w-5 h-5 text-success-600" /> : <Shirt className="w-5 h-5 text-success-600" />}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-slate-800">{item}</p>
-                    <p className="text-xs text-slate-600">
-                      {item.includes('bag') ? 'Professional insulated delivery bag' : 'Official branded partner uniform'}
-                    </p>
-                  </div>
-                  <div className="text-sm font-semibold text-success-700">✓</div>
+              <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200">
+                <div className="w-10 h-10 bg-success-100 rounded-lg flex items-center justify-center">
+                  <Check className="w-5 h-5 text-success-600" />
                 </div>
-              ))}
+                <div className="flex-1">
+                  <p className="font-medium text-slate-800">Instant Partner Access</p>
+                  <p className="text-xs text-slate-600">
+                    Immediate access to all delivery opportunities in your area
+                  </p>
+                </div>
+                <div className="text-sm font-semibold text-success-700">✓</div>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200">
+                <div className="w-10 h-10 bg-success-100 rounded-lg flex items-center justify-center">
+                  <Check className="w-5 h-5 text-success-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-slate-800">Start Earning Today</p>
+                  <p className="text-xs text-slate-600">
+                    Begin taking delivery orders immediately after verification
+                  </p>
+                </div>
+                <div className="text-sm font-semibold text-success-700">✓</div>
+              </div>
             </div>
           </div>
           
-          {isTwoWheeler(vehicleType) ? (
-            <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <p className="text-sm text-blue-800">
-                <strong>Two-Wheeler Special:</strong> Complete starter kit with delivery bag and uniform - everything you need to start earning!
-              </p>
-            </div>
-          ) : (
-            <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
-              <p className="text-sm text-green-800">
-                <strong>Multi-Wheeler Advantage:</strong> Lower registration fee since no delivery bag needed - your vehicle provides the storage space!
-              </p>
-            </div>
-          )}
+          <div className="mt-4 p-4 bg-success-50 rounded-lg border border-success-200">
+            <p className="text-sm text-success-800">
+              <strong>Zero Registration Fee:</strong> We believe in making it easy for partners to join. No upfront costs - just bring your vehicle and start earning!
+            </p>
+          </div>
         </div>
 
-        {/* Payment Methods */}
+        {/* Complete Registration */}
         <div className="partner-card p-6">
-          <h3 className="text-lg font-bold text-slate-800 mb-4">Select Payment Method</h3>
+          <h3 className="text-lg font-bold text-slate-800 mb-4">Complete Your Registration</h3>
 
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <button
-              onClick={() => setMethod("upi")}
-              className={`flex items-center gap-2 p-3 rounded-lg border transition-all ${method === "upi" ? "border-brand-500 bg-brand-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
-            >
-              <QrCode className="w-5 h-5" /> UPI
-              {method === "upi" && <Check className="w-4 h-4 text-brand-600 ml-auto" />}
-            </button>
-            <button
-              onClick={() => setMethod("card")}
-              className={`flex items-center gap-2 p-3 rounded-lg border transition-all ${method === "card" ? "border-brand-500 bg-brand-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
-            >
-              <CreditCard className="w-5 h-5" /> Card
-              {method === "card" && <Check className="w-4 h-4 text-brand-600 ml-auto" />}
-            </button>
+          <div className="mb-6 p-4 bg-gradient-to-r from-brand-50 to-success-50 rounded-lg border border-success-200">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-12 h-12 bg-success-500 rounded-full flex items-center justify-center">
+                <Check className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-slate-800">Ready to Start!</h4>
+                <p className="text-sm text-slate-600">Your documents are verified and ready for processing</p>
+              </div>
+            </div>
           </div>
-
-          {method === "upi" ? (
-            <div className="space-y-3">
-              <label className="text-sm font-medium text-slate-700">Enter UPI ID</label>
-              <input
-                type="text"
-                placeholder="yourname@upi"
-                value={upiId}
-                onChange={(e) => setUpiId(e.target.value)}
-                className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-              <div className="grid grid-cols-3 gap-2 text-sm">
-                <button onClick={() => setUpiId("9876543210@paytm")} className="px-3 py-2 bg-slate-100 rounded-lg hover:bg-slate-200">Paytm</button>
-                <button onClick={() => setUpiId("yourname@oksbi")} className="px-3 py-2 bg-slate-100 rounded-lg hover:bg-slate-200">SBI</button>
-                <button onClick={() => setUpiId("yourname@okicici")} className="px-3 py-2 bg-slate-100 rounded-lg hover:bg-slate-200">ICICI</button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <label className="text-sm font-medium text-slate-700">Card Details</label>
-              <input
-                type="text"
-                inputMode="numeric"
-                placeholder="1234 5678 9012 3456"
-                value={card.number}
-                onChange={(e) => setCard({ ...card, number: e.target.value })}
-                className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  placeholder="MM/YY"
-                  value={card.expiry}
-                  onChange={(e) => setCard({ ...card, expiry: e.target.value })}
-                  className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
-                <input
-                  type="password"
-                  placeholder="CVV"
-                  value={card.cvv}
-                  onChange={(e) => setCard({ ...card, cvv: e.target.value })}
-                  className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
-              </div>
-              <input
-                type="text"
-                placeholder="Name on card"
-                value={card.name}
-                onChange={(e) => setCard({ ...card, name: e.target.value })}
-                className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-            </div>
-          )}
 
           <button
             onClick={handleProceed}
             disabled={isLoading}
-            className="mt-6 w-full bg-brand-600 text-white py-4 px-6 rounded-xl text-base font-semibold hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-success-600 text-white py-4 px-6 rounded-xl text-base font-semibold hover:bg-success-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoading ? (
               <div className="flex items-center justify-center space-x-2">
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                <span>Processing Payment...</span>
+                <span>Completing Registration...</span>
               </div>
             ) : (
-              `Pay ${formatRegistrationFee(amount)} & Complete Registration`
+              'Complete Free Registration & Start Earning'
             )}
           </button>
           
           <div className="mt-4 flex items-center justify-center gap-2 text-xs text-slate-500">
             <Shield className="w-4 h-4" />
-            <span>Secure payment processing</span>
+            <span>Secure registration process</span>
           </div>
           
-          <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-xs text-blue-700">
-              <strong>Note:</strong> After successful payment, your account will be submitted for verification. 
-              You'll receive your registration kit within 2-3 business days.
+          <div className="mt-4 p-3 bg-success-50 rounded-lg border border-success-200">
+            <p className="text-xs text-success-700">
+              <strong>Note:</strong> After completing registration, your account will be submitted for verification. 
+              You can start earning once verification is complete (usually within 24 hours).
             </p>
           </div>
         </div>
