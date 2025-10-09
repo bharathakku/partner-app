@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, useRef } from 'react'
+import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
 
 const ProfileContext = createContext()
@@ -252,7 +252,7 @@ export function ProfileProvider({ children }) {
     setProfileData(prev => ({ ...prev, performance: { ...prev.performance, ...stats } }))
   }
 
-  const calculateProfileCompletion = () => {
+  const calculateProfileCompletion = useCallback(() => {
     const requiredFields = [profileData.name, profileData.email, profileData.phone, profileData.address, profileData.dateOfBirth]
     const requiredDocuments = ['aadharCard', 'panCard', 'drivingLicense', 'vehicleRC', 'vehiclePicture']
     const verifiedDocs = requiredDocuments.filter(doc => profileData.documents[doc]?.status === 'verified').length
@@ -261,7 +261,7 @@ export function ProfileProvider({ children }) {
     const totalPoints = requiredFields.length + requiredDocuments.length + Object.keys(profileData.vehicle).length
     const completedPoints = fieldsComplete + verifiedDocs + vehicleInfoComplete
     return Math.round((completedPoints / totalPoints) * 100)
-  }
+  }, [profileData])
 
   const getUrgentActions = () => {
     const actions = []
@@ -291,7 +291,7 @@ export function ProfileProvider({ children }) {
     if (completion !== profileData.profileComplete) {
       setProfileData(prev => ({ ...prev, profileComplete: completion }))
     }
-  }, [profileData.name, profileData.email, profileData.phone, profileData.address, profileData.dateOfBirth, profileData.documents, profileData.vehicle, calculateProfileCompletion, profileData.profileComplete])
+  }, [calculateProfileCompletion, profileData.profileComplete])
 
   const value = {
     profileData,

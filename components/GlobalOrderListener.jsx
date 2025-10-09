@@ -16,7 +16,10 @@ export default function GlobalOrderListener() {
 
   // Require auth and restrict to operational pages only
   const token = useMemo(() => (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null), [])
-  const shouldAttach = !!token && (pathname?.startsWith('/dashboard') || pathname?.startsWith('/orders'))
+  const subActive = useMemo(() => {
+    try { return typeof window !== 'undefined' && localStorage.getItem('sub_active') === 'true' } catch { return false }
+  }, [pathname])
+  const shouldAttach = !!token && subActive && (pathname?.startsWith('/dashboard') || pathname?.startsWith('/orders'))
 
   // Hydrate from localStorage fast
   useEffect(() => {
@@ -32,12 +35,12 @@ export default function GlobalOrderListener() {
     async function poll() {
       try {
         const t = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-        if (!shouldAttach || !t) return
+        if (!shouldAttach || !t) { setIsOnline(false); return }
         const res = await fetch(`${API_BASE_URL}/drivers/me`, { headers: { Authorization: `Bearer ${t}` } })
         if (res.ok) {
           const me = await res.json()
           const online = !!me?.isOnline
-          setIsOnline(online)
+          setIsOnline(subActive ? online : false)
           try { localStorage.setItem('driver_is_online', JSON.stringify(online)) } catch {}
         }
       } catch {}
@@ -45,7 +48,7 @@ export default function GlobalOrderListener() {
     }
     poll()
     return () => { try { clearTimeout(timer) } catch {} }
-  }, [shouldAttach])
+  }, [shouldAttach, subActive])
 
   // Resume audio context on any click/tap globally
   useEffect(() => {
