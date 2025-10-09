@@ -9,6 +9,11 @@ const nextConfig = {
     ],
     unoptimized: false,
   },
+  async rewrites() {
+    return [
+      { source: '/privacy-policy', destination: '/privacy' },
+    ];
+  },
 };
 
 export default nextConfig;
