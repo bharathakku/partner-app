@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOrder } from '../contexts/OrderContext';
 import { useNotification } from '../services/notificationService';
@@ -139,7 +139,7 @@ export default function OrdersPage() {
       clearTimeout(initDelay);
       setSimulationActive(false);
     };
-  }, [isOnline, hasReceivedOrder, activeTab]);
+  }, [isOnline, hasReceivedOrder, activeTab, simulationActive, showNewOrderPopup]);
 
   // Redirect if there's already an active order
   useEffect(() => {
@@ -164,7 +164,7 @@ export default function OrdersPage() {
   }, [currentOrder, router, ORDER_STATUSES]);
 
   // Order popup functions
-  const showNewOrderPopup = async (order) => {
+  const showNewOrderPopup = useCallback(async (order) => {
     if (!isOnline) return;
 
     // Trigger notification alerts
@@ -178,7 +178,7 @@ export default function OrdersPage() {
         handleOrderDecline();
       }, 30000)
     });
-  };
+  }, [isOnline, triggerOrderAlert, handleOrderDecline]);
 
   const handleOrderAccept = () => {
     if (!currentOrderPopup) return;
@@ -224,11 +224,11 @@ export default function OrdersPage() {
     return distance || 'N/A';
   };
 
-  const calculateRemainingTime = () => {
+  const calculateRemainingTime = useCallback(() => {
     if (!currentOrderPopup?.showTime) return 30;
     const elapsed = (Date.now() - currentOrderPopup.showTime) / 1000;
     return Math.max(0, 30 - Math.floor(elapsed));
-  };
+  }, [currentOrderPopup]);
 
   const [remainingTime, setRemainingTime] = useState(30);
 
@@ -243,7 +243,7 @@ export default function OrdersPage() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [currentOrderPopup]);
+  }, [currentOrderPopup, calculateRemainingTime]);
 
   const handleUserInteraction = () => {
     resetAudioContext();

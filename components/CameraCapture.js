@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { Camera, Upload, CheckCircle2, AlertCircle, Loader } from 'lucide-react'
 import { openCameraModal, captureImage, uploadImage } from '../lib/imageUtils'
 
@@ -163,11 +164,14 @@ export default function CameraCapture({
         <div className="grid grid-cols-2 gap-3">
           {images.map((image) => (
             <div key={image.id} className="relative">
-              <div className="relative">
-                <img 
-                  src={image.preview} 
+              <div className="relative w-full h-32">
+                <Image 
+                  src={image.preview}
                   alt={image.name}
-                  className="w-full h-32 object-cover rounded-lg border border-slate-200"
+                  fill
+                  sizes="(max-width: 768px) 50vw, 200px"
+                  className="object-cover rounded-lg border border-slate-200"
+                  unoptimized
                 />
                 
                 {/* Upload Status Overlay */}

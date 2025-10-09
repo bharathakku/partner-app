@@ -188,9 +188,6 @@ export function OrderProvider({ children }) {
       window.localStorage.setItem(`partner_balance_${uid}`, String(state.partnerBalance ?? 0))
       window.localStorage.setItem(`today_earnings_${uid}`, String(state.totalEarningsToday ?? 0))
       window.localStorage.setItem(`today_completed_${uid}`, String(state.completedOrdersToday ?? 0))
-      if (state.currentOrder) {
-        window.localStorage.setItem(`current_order_${uid}`, JSON.stringify(state.currentOrder))
-      }
     } catch {}
   }, [state.orderHistory, state.partnerBalance, state.totalEarningsToday, state.completedOrdersToday])
 

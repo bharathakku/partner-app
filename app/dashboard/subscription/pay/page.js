@@ -27,9 +27,9 @@ function SubscriptionPayContent() {
   const [card, setCard] = useState({ number: "", name: "", expiry: "", cvv: "" })
   
   // Calculate subscription period (renew starts after existing expiry if still active)
-  const now = new Date()
   const existing = getStoredSubscription()
   const baseStart = useMemo(() => {
+    const now = new Date()
     if (!existing?.expiryDate) return now
     const existingExpiry = new Date(existing.expiryDate)
     return existingExpiry > now ? existingExpiry : now

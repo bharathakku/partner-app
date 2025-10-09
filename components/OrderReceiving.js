@@ -14,8 +14,11 @@ const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
   const [simulationActive, setSimulationActive] = useState(false);
 
   const { profileData } = useProfile();
-  const driverId = useMemo(() => profileData?.account?.partnerId && profileData.account.partnerId !== '—' ? profileData.account.partnerId : null, [profileData]);
-
+  const driverId = useMemo(() => (
+    profileData?.account?.partnerId && profileData.account.partnerId !== '—'
+      ? profileData.account.partnerId
+      : null
+  ), [profileData]);
   const { triggerOrderAlert, resetAudioContext } = useNotification();
   const { acceptOrder } = useOrder();
 
@@ -81,7 +84,7 @@ const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
       try { leaveDriverRoom(driverId); } catch {}
       try { clearTimeout(timer); } catch {}
     };
-  }, [isOnline, driverId, currentOrderPopup]);
+  }, [isOnline, driverId, currentOrderPopup, showNewOrderPopup]);
 
   const showNewOrderPopup = useCallback(async (order) => {
     if (!isOnline) return;
@@ -98,7 +101,7 @@ const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
         handleOrderDecline();
       }, 30000)
     });
-  }, [isOnline, triggerOrderAlert]);
+  }, [isOnline, triggerOrderAlert, handleOrderDecline]);
 
   const handleOrderAccept = useCallback(async () => {
     if (!currentOrderPopup) return;
@@ -166,11 +169,11 @@ const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
     return distance || 'N/A';
   };
 
-  const calculateRemainingTime = () => {
+  const calculateRemainingTime = useCallback(() => {
     if (!currentOrderPopup?.showTime) return 30;
     const elapsed = (Date.now() - currentOrderPopup.showTime) / 1000;
     return Math.max(0, 30 - Math.floor(elapsed));
-  };
+  }, [currentOrderPopup]);
 
   const [remainingTime, setRemainingTime] = useState(30);
 
@@ -185,7 +188,7 @@ const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [currentOrderPopup]);
+  }, [currentOrderPopup, calculateRemainingTime]);
 
   // Reset audio context on first interaction
   const handleUserInteraction = () => {

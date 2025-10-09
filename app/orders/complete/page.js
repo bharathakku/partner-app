@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useOrder } from '../../contexts/OrderContext';
 import { 
@@ -270,8 +271,15 @@ export default function CompleteOrderPage() {
                 <p className="text-xs text-slate-500 mt-2">Uploading photo...</p>
               )}
               {proofUrl && (
-                <div className="mt-2">
-                  <img src={proofUrl} alt="Delivery proof" className="max-h-40 rounded border" />
+                <div className="mt-2 relative w-full h-40">
+                  <Image
+                    src={proofUrl}
+                    alt="Delivery proof"
+                    fill
+                    sizes="(max-width: 768px) 100vw, 600px"
+                    className="object-contain rounded border"
+                    unoptimized
+                  />
                 </div>
               )}
             </div>

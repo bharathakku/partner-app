@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import { MapPin, Plus, Pencil, Trash2, ArrowLeft, Loader2 } from "lucide-react"
 import AddressForm from "../../../components/AddressForm"
@@ -24,7 +24,7 @@ export default function AddressesPage() {
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     setError("")
     try {
@@ -37,9 +37,9 @@ export default function AddressesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [token])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [load])
 
   const onAdd = async (payload) => {
     setSubmitting(true)

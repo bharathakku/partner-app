@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import { ArrowLeft, User, Mail, Phone, Loader2 } from "lucide-react"
 
@@ -22,9 +22,7 @@ export default function ProfilePage() {
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
 
-  useEffect(() => { load() }, [])
-
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
     setError("")
     setSuccess("")
@@ -41,7 +39,11 @@ export default function ProfilePage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [token])
+
+  useEffect(() => { load() }, [load])
+
+  
 
   async function save(e) {
     e.preventDefault()

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useOrder } from '../../contexts/OrderContext';
 import { 
@@ -307,7 +308,16 @@ export default function PickupCompletePage() {
           {proofUrl && (
             <div className="mt-3">
               <p className="text-xs text-slate-600 mb-1">Uploaded:</p>
-              <img src={proofUrl} alt="Pickup proof" className="max-h-40 rounded border" />
+              <div className="relative w-full h-40">
+                <Image
+                  src={proofUrl}
+                  alt="Pickup proof"
+                  fill
+                  sizes="(max-width: 768px) 100vw, 600px"
+                  className="object-contain rounded border"
+                  unoptimized
+                />
+              </div>
             </div>
           )}
         </div>

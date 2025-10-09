@@ -291,7 +291,7 @@ export function ProfileProvider({ children }) {
     if (completion !== profileData.profileComplete) {
       setProfileData(prev => ({ ...prev, profileComplete: completion }))
     }
-  }, [profileData.name, profileData.email, profileData.phone, profileData.address, profileData.dateOfBirth, profileData.documents, profileData.vehicle])
+  }, [profileData.name, profileData.email, profileData.phone, profileData.address, profileData.dateOfBirth, profileData.documents, profileData.vehicle, calculateProfileCompletion, profileData.profileComplete])
 
   const value = {
     profileData,
