@@ -22,8 +22,7 @@ export const viewport = {
 
 import { OrderProvider } from './contexts/OrderContext';
 import { ProfileProvider } from './contexts/ProfileContext';
-import dynamic from 'next/dynamic';
-const GlobalOrderListener = dynamic(() => import('../components/GlobalOrderListener.jsx'), { ssr: false });
+import GlobalOrderListener from '../components/GlobalOrderListener.jsx';
 
 export default function RootLayout({ children }) {
   return (
