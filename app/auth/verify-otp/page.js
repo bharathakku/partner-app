@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Shield, Loader2, AlertCircle, RefreshCw } from "lucide-react"
@@ -66,7 +66,7 @@ export default function VerifyOTP() {
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [router])
+  }, [router, handleVerify])
 
   const handleInputChange = (index, value) => {
     if (value.length > 1) return
@@ -94,7 +94,7 @@ export default function VerifyOTP() {
     }
   }
 
-  const handleVerify = async (otpCode = otp.join("")) => {
+  const handleVerify = useCallback(async (otpCode = otp.join("")) => {
     if (otpCode.length !== 6) {
       setError("Please enter the complete 6-digit code")
       return
