@@ -22,7 +22,36 @@ const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
   const { triggerOrderAlert, resetAudioContext } = useNotification();
   const { acceptOrder } = useOrder();
 
-  // Real-time socket hookup and fallback polling
+  // Define decline handler first to avoid TDZ in dependencies
+  const handleOrderDecline = useCallback(() => {
+    if (!currentOrderPopup) return;
+
+    // Clear timeout
+    if (currentOrderPopup.timeoutId) {
+      clearTimeout(currentOrderPopup.timeoutId);
+    }
+
+    setCurrentOrderPopup(null);
+  }, [currentOrderPopup]);
+
+  const showNewOrderPopup = useCallback(async (order) => {
+    if (!isOnline) return;
+
+    // Trigger notification alerts
+    await triggerOrderAlert(order);
+    
+    // Show popup
+    setCurrentOrderPopup({
+      ...order,
+      showTime: Date.now(),
+      timeoutId: setTimeout(() => {
+        // Auto-dismiss after 30 seconds
+        handleOrderDecline();
+      }, 30000)
+    });
+  }, [isOnline, triggerOrderAlert, handleOrderDecline]);
+
+  // Real-time socket hookup and fallback polling (after showNewOrderPopup is defined)
   useEffect(() => {
     // Connect socket
     const sock = connectSocket();
@@ -86,23 +115,6 @@ const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
     };
   }, [isOnline, driverId, currentOrderPopup, showNewOrderPopup]);
 
-  const showNewOrderPopup = useCallback(async (order) => {
-    if (!isOnline) return;
-
-    // Trigger notification alerts
-    await triggerOrderAlert(order);
-    
-    // Show popup
-    setCurrentOrderPopup({
-      ...order,
-      showTime: Date.now(),
-      timeoutId: setTimeout(() => {
-        // Auto-dismiss after 30 seconds
-        handleOrderDecline();
-      }, 30000)
-    });
-  }, [isOnline, triggerOrderAlert, handleOrderDecline]);
-
   const handleOrderAccept = useCallback(async () => {
     if (!currentOrderPopup) return;
 
@@ -147,16 +159,7 @@ const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
     setCurrentOrderPopup(null);
   }, [currentOrderPopup, acceptOrder]);
 
-  const handleOrderDecline = useCallback(() => {
-    if (!currentOrderPopup) return;
-
-    // Clear timeout
-    if (currentOrderPopup.timeoutId) {
-      clearTimeout(currentOrderPopup.timeoutId);
-    }
-
-    setCurrentOrderPopup(null);
-  }, [currentOrderPopup]);
+  // moved earlier
 
 
   const formatTimeAgo = (timestamp) => {
