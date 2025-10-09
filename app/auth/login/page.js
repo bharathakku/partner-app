@@ -63,19 +63,21 @@ function LoginInner() {
         credentials: 'include'
       })
       if (!res.ok) {
-        // 401/403 -> token valid but not eligible for /drivers/me yet
-        if (res.status === 401 || res.status === 403) {
-          router.replace(mode === "signup" ? "/auth/kyc" : "/dashboard")
-          return
-        }
-        // Other errors: assume no profile yet
+        // If we cannot fetch profile, on signup guide to KYC; on login, fallback to dashboard check
         router.replace(mode === "signup" ? "/auth/kyc" : "/dashboard")
         return
       }
       const driver = await res.json()
-      // If driver object missing/null, still take them to dashboard for login (signup -> KYC)
-      if (!driver) {
-        router.replace(mode === "signup" ? "/auth/kyc" : "/dashboard")
+      // Decide path by documents and active state
+      const docs = Array.isArray(driver?.documents) ? driver.documents : []
+      const hasDocs = docs.length > 0
+      const isActive = !!driver?.isActive
+      if (!hasDocs) {
+        router.replace("/auth/kyc")
+        return
+      }
+      if (!isActive) {
+        router.replace("/auth/activation-pending")
         return
       }
       try { localStorage.setItem('driver_profile', JSON.stringify(driver)) } catch {}
@@ -135,7 +137,7 @@ function LoginInner() {
       const res = await fetch(`${API_BASE}/auth/phone/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: "+91" + phone, role: "driver" })
+        body: JSON.stringify({ phone: "+91" + phone, role: "driver", mode })
       })
       const data = await res.json()
       if (!res.ok || !data.token) throw new Error(data.error || "Failed to send OTP")
