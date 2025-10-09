@@ -29,6 +29,50 @@ export default function VerifyOTP() {
   })()
   const [otpToken, setOtpToken] = useState("")
 
+  // Define handleVerify BEFORE effects that reference it
+  const handleVerify = useCallback(async (otpCode = otp.join("")) => {
+    if (otpCode.length !== 6) {
+      setError("Please enter the complete 6-digit code")
+      return
+    }
+
+    setIsLoading(true)
+    setError("")
+
+    try {
+      if (!otpToken) {
+        setError("OTP session expired. Please request a new code.")
+        return
+      }
+
+      const res = await fetch(`${API_BASE}/auth/phone/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: otpToken, code: otpCode, role: "partner" })
+      })
+      const data = await res.json()
+      if (!res.ok || !data.token) {
+        throw new Error(data.error || "Invalid verification code")
+      }
+
+      // Persist auth
+      localStorage.setItem("auth_token", data.token)
+      localStorage.setItem("user_data", JSON.stringify(data.user))
+      localStorage.setItem("partner_authenticated", "true")
+
+      // Navigate post-login
+      if (authMode === "signup") {
+        router.push("/auth/kyc")
+      } else {
+        router.push("/dashboard")
+      }
+    } catch (err) {
+      setError(err.message || "Verification failed. Please try again.")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [otp, otpToken, authMode, router, API_BASE])
+
   useEffect(() => {
     // Get phone number and auth mode from localStorage
     const storedPhone = localStorage.getItem("partner_phone")
@@ -94,48 +138,7 @@ export default function VerifyOTP() {
     }
   }
 
-  const handleVerify = useCallback(async (otpCode = otp.join("")) => {
-    if (otpCode.length !== 6) {
-      setError("Please enter the complete 6-digit code")
-      return
-    }
-
-    setIsLoading(true)
-    setError("")
-
-    try {
-      if (!otpToken) {
-        setError("OTP session expired. Please request a new code.")
-        return
-      }
-
-      const res = await fetch(`${API_BASE}/auth/phone/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: otpToken, code: otpCode, role: "partner" })
-      })
-      const data = await res.json()
-      if (!res.ok || !data.token) {
-        throw new Error(data.error || "Invalid verification code")
-      }
-
-      // Persist auth
-      localStorage.setItem("auth_token", data.token)
-      localStorage.setItem("user_data", JSON.stringify(data.user))
-      localStorage.setItem("partner_authenticated", "true")
-
-      // Navigate post-login
-      if (authMode === "signup") {
-        router.push("/auth/kyc")
-      } else {
-        router.push("/dashboard")
-      }
-    } catch (err) {
-      setError(err.message || "Verification failed. Please try again.")
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  
 
   const handleResendOTP = async () => {
     if (!canResend) return
