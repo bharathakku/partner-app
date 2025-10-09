@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import HelpSupportModal from '../../../components/HelpSupportModal';
 import CameraCapture from '../../../components/CameraCapture';
+import { ordersService } from '../../../lib/api/apiClient';
 
 export default function PickupCompletePage() {
   const router = useRouter();
@@ -21,6 +22,8 @@ export default function PickupCompletePage() {
     photoTaken: false
   });
   const [showHelp, setShowHelp] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [proofUrl, setProofUrl] = useState('');
 
   // Redirect if no current order or wrong status
   useEffect(() => {
@@ -36,18 +39,31 @@ export default function PickupCompletePage() {
     }));
   };
 
-  const handleImageCaptured = (file, images) => {
-    console.log('Order image captured:', file.name);
-    // Auto-mark photo step as complete when image is captured
-    setVerificationSteps(prev => ({
-      ...prev,
-      photoTaken: true
-    }));
+  const handleImageCaptured = async (file, _images) => {
+    if (!currentOrder?.id || !file) return;
+    try {
+      setUploading(true);
+      // Upload proof to backend
+      const formData = new FormData();
+      formData.append('proof', file);
+      formData.append('type', 'pickup');
+      const res = await ordersService.client.request(`/orders/${currentOrder.id}/proof`, {
+        method: 'POST',
+        body: formData,
+        headers: {},
+      });
+      if (res?.url) setProofUrl(res.url);
+      setVerificationSteps(prev => ({ ...prev, photoTaken: true }));
+    } catch (e) {
+      console.error('Upload failed', e);
+      alert('Failed to upload photo. Please try again.');
+    } finally {
+      setUploading(false);
+    }
   };
 
-  const handleImageUploaded = (result, images) => {
-    console.log('Order image uploaded:', result);
-    // Could store upload result to order data here
+  const handleImageUploaded = (result, _images) => {
+    if (result?.url) setProofUrl(result.url);
   };
 
   const handleCompletePickup = async () => {
@@ -285,6 +301,15 @@ export default function PickupCompletePage() {
             onImageCaptured={handleImageCaptured}
             onImageUploaded={handleImageUploaded}
           />
+          {uploading && (
+            <p className="text-xs text-slate-500 mt-2">Uploading photo...</p>
+          )}
+          {proofUrl && (
+            <div className="mt-3">
+              <p className="text-xs text-slate-600 mb-1">Uploaded:</p>
+              <img src={proofUrl} alt="Pickup proof" className="max-h-40 rounded border" />
+            </div>
+          )}
         </div>
       </div>
 

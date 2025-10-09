@@ -3,24 +3,21 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOrder } from '../contexts/OrderContext';
-import { useNotification } from '../services/notificationService';
-import { routeBasedOrders } from '../data/dummyOrders';
 import { 
   MapPin, Navigation, History,
   Search, Star, Package, HelpCircle
 } from 'lucide-react';
 import BottomNav from '../../components/BottomNav';
 import HelpSupportModal from '../../components/HelpSupportModal';
+import { isSubscriptionActive } from '../../lib/subscription';
 
 export default function OrdersPage() {
   const router = useRouter();
-  const { currentOrder, acceptOrder, ORDER_STATUSES, partnerBalance, totalEarningsToday, completedOrdersToday, orderHistory, demoOrders } = useOrder();
+  const { currentOrder, ORDER_STATUSES, partnerBalance, totalEarningsToday, completedOrdersToday, orderHistory } = useOrder();
   
   // Order receiving states
   const [isOnline, setIsOnline] = useState(false);
-  const [currentOrderPopup, setCurrentOrderPopup] = useState(null);
-  const [acceptingOrder, setAcceptingOrder] = useState(null);
-  const [simulationActive, setSimulationActive] = useState(false);
+  const [isSubscribed, setIsSubscribed] = useState(false);
   const [hasReceivedOrder, setHasReceivedOrder] = useState(false);
   
   // Access restriction due to unpaid dues > 7 days
@@ -34,7 +31,7 @@ export default function OrdersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showHelp, setShowHelp] = useState(false);
   
-  const { triggerOrderAlert, resetAudioContext } = useNotification();
+  // No notification simulation in production build
 
   // Compute unpaid days based on orderHistory and settlement marker in localStorage
   useEffect(() => {
@@ -58,33 +55,22 @@ export default function OrdersPage() {
     setDuesBlocked(unpaid > 7);
   }, [orderHistory]);
 
-  // Auto-activate online mode and start simulation if not blocked
+  // Resolve subscription status from localStorage on mount
   useEffect(() => {
-    if (!duesBlocked) setIsOnline(true);
-  }, [duesBlocked]);
-
-  // Simulate incoming orders when online
-  useEffect(() => {
-    if (!isOnline || simulationActive || hasReceivedOrder) return;
-
-    const startSimulation = () => {
-      setSimulationActive(true);
-      
-      // Show first order after 3 seconds
-      setTimeout(() => {
-        showNewOrderPopup(routeBasedOrders[0]);
-      }, 3000);
-    };
-
-    const initDelay = setTimeout(startSimulation, 1000);
-
-    return () => {
-      clearTimeout(initDelay);
-      setSimulationActive(false);
-    };
-  }, [isOnline, hasReceivedOrder]);
-
-  // Redirect if there's already an active order
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem('partnerSubscription');
+      if (raw) {
+        const sub = JSON.parse(raw);
+        setIsSubscribed(isSubscriptionActive(sub?.expiryDate));
+      } else {
+        setIsSubscribed(false);
+      }
+    } catch {
+      setIsSubscribed(false);
+    }
+  }, []);
+  // Redirect if there's already an active in-progress order
   useEffect(() => {
     if (currentOrder) {
       switch (currentOrder.status) {
@@ -101,56 +87,13 @@ export default function OrdersPage() {
           router.push('/orders/complete');
           break;
         default:
+          // For statuses like PAID/COMPLETED or unknown, stay on Orders page
           break;
       }
     }
   }, [currentOrder, router, ORDER_STATUSES]);
 
-  // Order popup functions
-  const showNewOrderPopup = async (order) => {
-    if (!isOnline) return;
-
-    // Trigger notification alerts
-    await triggerOrderAlert(order);
-    
-    // Show popup
-    setCurrentOrderPopup({
-      ...order,
-      showTime: Date.now(),
-      timeoutId: setTimeout(() => {
-        handleOrderDecline();
-      }, 30000)
-    });
-  };
-
-  const handleOrderAccept = () => {
-    if (!currentOrderPopup) return;
-
-    // Clear timeout
-    if (currentOrderPopup.timeoutId) {
-      clearTimeout(currentOrderPopup.timeoutId);
-    }
-
-    const acceptedOrderData = { ...currentOrderPopup };
-    delete acceptedOrderData.timeoutId;
-    delete acceptedOrderData.showTime;
-
-    // Set states
-    setHasReceivedOrder(true);
-    acceptOrder(acceptedOrderData);
-    setCurrentOrderPopup(null);
-  };
-
-  const handleOrderDecline = () => {
-    if (!currentOrderPopup) return;
-
-    // Clear timeout
-    if (currentOrderPopup.timeoutId) {
-      clearTimeout(currentOrderPopup.timeoutId);
-    }
-
-    setCurrentOrderPopup(null);
-  };
+  // No popup in production simulation
 
   const formatTimeAgo = (timestamp) => {
     const diff = Date.now() - new Date(timestamp).getTime();
@@ -162,30 +105,9 @@ export default function OrdersPage() {
     return distance || 'N/A';
   };
 
-  const calculateRemainingTime = () => {
-    if (!currentOrderPopup?.showTime) return 30;
-    const elapsed = (Date.now() - currentOrderPopup.showTime) / 1000;
-    return Math.max(0, 30 - Math.floor(elapsed));
-  };
+  // No remaining-time timer either
 
-  const [remainingTime, setRemainingTime] = useState(30);
-
-  useEffect(() => {
-    if (!currentOrderPopup) {
-      setRemainingTime(30);
-      return;
-    }
-
-    const timer = setInterval(() => {
-      setRemainingTime(calculateRemainingTime());
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [currentOrderPopup]);
-
-  const handleUserInteraction = () => {
-    resetAudioContext();
-  };
+  const handleUserInteraction = () => {};
 
   // Consolidated order history (context orderHistory + transformed demoOrders)
   const consolidatedHistory = useMemo(() => {
@@ -202,23 +124,10 @@ export default function OrdersPage() {
       paymentMethod: o.paymentMethod || 'Online',
       rating: o.rating || null,
     }));
-    const demoPart = (demoOrders || []).map(o => ({
-      id: o.id,
-      customerName: o.customerName,
-      status: 'completed',
-      date: o.orderTime || new Date().toISOString(),
-      earnings: o.partnerEarnings ?? 0,
-      distance: o.distance || 'N/A',
-      pickupLocation: o.pickupLocation || { address: 'Unknown' },
-      customerLocation: o.customerLocation || { address: 'Unknown' },
-      parcelDetails: o.parcelDetails || { description: 'Package' },
-      paymentMethod: o.paymentMethod || 'Online',
-      rating: o.rating || null,
-    }));
     // Sort by date desc
-    const combined = [...historyPart, ...demoPart].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const combined = [...historyPart].sort((a, b) => new Date(b.date) - new Date(a.date));
     return combined;
-  }, [orderHistory, demoOrders, ORDER_STATUSES]);
+  }, [orderHistory, ORDER_STATUSES]);
 
   // Filter orders based on search and status
   const filteredOrders = consolidatedHistory.filter(order => {
@@ -260,8 +169,15 @@ export default function OrdersPage() {
     );
   };
 
-  if (currentOrder) {
-    return null; // Will redirect
+  // Only block render if current order is in-progress; otherwise show page
+  const isInProgress = currentOrder && [
+    ORDER_STATUSES.ACCEPTED,
+    ORDER_STATUSES.PICKUP_REACHED,
+    ORDER_STATUSES.PICKUP_COMPLETE,
+    ORDER_STATUSES.CUSTOMER_REACHED,
+  ].includes(currentOrder.status)
+  if (isInProgress) {
+    return null; // Will redirect from effect
   }
 
   return (
@@ -323,7 +239,21 @@ export default function OrdersPage() {
         {activeTab === 'live' ? (
           // Live Orders Tab
           <>
-            {duesBlocked ? (
+            {!isSubscribed ? (
+              <div className="text-center py-16">
+                <div className="w-20 h-20 bg-yellow-100 rounded-full mx-auto mb-6 flex items-center justify-center">
+                  <span className="text-yellow-600 font-bold">₹</span>
+                </div>
+                <h3 className="text-xl font-semibold text-gray-800 mb-2">Subscription Required</h3>
+                <p className="text-gray-600 mb-4">Activate a plan to go online and receive orders.</p>
+                <button
+                  onClick={() => router.push('/dashboard/subscription')}
+                  className="px-6 py-3 rounded-xl bg-brand-600 text-white font-semibold hover:bg-brand-700"
+                >
+                  View Plans
+                </button>
+              </div>
+            ) : duesBlocked ? (
               <div className="text-center py-16">
                 <div className="w-20 h-20 bg-orange-100 rounded-full mx-auto mb-6 flex items-center justify-center">
                   <div className="w-3 h-3 bg-orange-500 rounded-full animate-pulse"></div>
@@ -335,7 +265,7 @@ export default function OrdersPage() {
                   <p className="text-sm text-orange-800">Total due (capped weekly): ₹{totalDue}</p>
                 </div>
                 <button
-                  onClick={() => window.location.href = '/dashboard/wallet'}
+                  onClick={() => window.location.href = '/dashboard/subscription'}
                   className="px-6 py-3 rounded-xl bg-orange-500 text-white font-semibold hover:bg-orange-600"
                 >
                   Go to Subscription
@@ -496,99 +426,7 @@ export default function OrdersPage() {
       {/* Bottom Navigation (same as Dashboard) */}
       <BottomNav />
 
-      {/* Order Popup */}
-      {currentOrderPopup && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full mx-4 transform animate-pulse-scale">
-            {/* Header with Timer */}
-            <div className="p-4 rounded-t-2xl flex justify-between items-center bg-green-500">
-              <div className="text-white">
-                <h2 className="font-bold text-lg">📦 New Order</h2>
-                <p className="text-sm opacity-90">{formatTimeAgo(currentOrderPopup.orderTime)}</p>
-              </div>
-              <div className="text-white text-right">
-                <div className={`text-2xl font-bold ${remainingTime <= 10 ? 'animate-pulse text-red-200' : ''}`}>
-                  {remainingTime}s
-                </div>
-                <p className="text-xs opacity-75">to respond</p>
-              </div>
-            </div>
-
-            {/* Order Details */}
-            <div className="p-4 space-y-4">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h3 className="font-semibold text-lg text-gray-800">{currentOrderPopup.customerName}</h3>
-                  <p className="text-gray-600 text-sm">{currentOrderPopup.id}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-green-600">₹{currentOrderPopup.partnerEarnings}</p>
-                  <p className="text-sm text-gray-500">earnings</p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-blue-500">📍</span>
-                  <div className="text-sm">
-                    <p className="font-medium text-gray-800">Pickup</p>
-                    <p className="text-gray-600">{currentOrderPopup.pickupLocation.address}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-green-500">🎯</span>
-                  <div className="text-sm">
-                    <p className="font-medium text-gray-800">Delivery</p>
-                    <p className="text-gray-600">{currentOrderPopup.customerLocation.address}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-between text-sm bg-gray-50 p-3 rounded-lg">
-                <div className="text-center">
-                  <p className="text-gray-500">Distance</p>
-                  <p className="font-semibold">{formatDistance(currentOrderPopup.distance)}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-gray-500">Time</p>
-                  <p className="font-semibold">{currentOrderPopup.estimatedTime}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-gray-500">Payment</p>
-                  <p className="font-semibold">{currentOrderPopup.paymentMethod === 'Cash on Delivery' ? 'COD' : 'Online'}</p>
-                </div>
-              </div>
-
-              <div className="bg-yellow-50 p-3 rounded-lg">
-                <p className="text-sm text-yellow-800">
-                  <span className="font-medium">Items:</span> {currentOrderPopup.parcelDetails.description}
-                </p>
-                {currentOrderPopup.deliveryInstructions && (
-                  <p className="text-sm text-yellow-700 mt-1">
-                    <span className="font-medium">Note:</span> {currentOrderPopup.deliveryInstructions}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="p-4 flex gap-3">
-              <button
-                onClick={handleOrderDecline}
-                className="flex-1 py-3 px-4 bg-gray-200 text-gray-800 rounded-xl font-semibold hover:bg-gray-300 transition-colors"
-              >
-                Decline
-              </button>
-              <button
-                onClick={handleOrderAccept}
-                className="flex-1 py-3 px-4 text-white rounded-xl font-semibold transition-colors bg-green-500 hover:bg-green-600"
-              >
-                Accept Order
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* No popup in production */}
 
       <style jsx>{`
         @keyframes pulse-scale {

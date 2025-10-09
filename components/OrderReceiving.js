@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNotification } from '../app/services/notificationService';
-import { routeBasedOrders } from '../app/data/dummyOrders';
 import { useOrder } from '../app/contexts/OrderContext';
+import { useProfile } from '../app/contexts/ProfileContext';
+import { connectSocket, joinDriverRoom, leaveDriverRoom, onOrderAssigned } from '../lib/socket';
+import { ordersService } from '../lib/api/apiClient';
 
 const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
   const [incomingOrders, setIncomingOrders] = useState([]);
@@ -11,31 +13,75 @@ const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
   const [acceptedOrder, setAcceptedOrder] = useState(null);
   const [simulationActive, setSimulationActive] = useState(false);
 
+  const { profileData } = useProfile();
+  const driverId = useMemo(() => profileData?.account?.partnerId && profileData.account.partnerId !== '—' ? profileData.account.partnerId : null, [profileData]);
+
   const { triggerOrderAlert, resetAudioContext } = useNotification();
   const { acceptOrder } = useOrder();
 
-  // Simulate incoming orders when online
+  // Real-time socket hookup and fallback polling
   useEffect(() => {
-    if (!isOnline || simulationActive) return;
+    // Connect socket
+    const sock = connectSocket();
 
-    const startSimulation = () => {
-      setSimulationActive(true);
-      
-      // Start with first order after 5 seconds
-      const firstOrderDelay = 5000;
-      setTimeout(() => {
-        showNewOrderPopup(routeBasedOrders[0]);
-      }, firstOrderDelay);
-    };
+    if (!isOnline || !driverId) return;
 
-    // Start simulation after component mount
-    const initDelay = setTimeout(startSimulation, 1000);
+    // Join driver room to receive assignments
+    joinDriverRoom(driverId);
+
+    // Handle assignment push
+    const off = onOrderAssigned(async (payload) => {
+      // Normalize payload for UI
+      const order = {
+        id: payload.orderId,
+        customerName: 'New Booking',
+        partnerEarnings: payload.price ?? 0,
+        distance: (payload.distanceKm ?? 0) + ' km',
+        pickupLocation: { address: payload?.from?.address || '—' },
+        customerLocation: { address: payload?.to?.address || '—' },
+        parcelDetails: { description: `${payload.vehicleType || ''}`.trim() || 'Delivery' },
+        orderTime: new Date(payload.at || Date.now()).toISOString(),
+        paymentMethod: 'Cash on Delivery',
+      };
+      await showNewOrderPopup(order);
+      setIncomingOrders(prev => [payload, ...prev]);
+    });
+
+    // Fallback polling for assigned orders
+    let timer;
+    async function pollAssigned() {
+      try {
+        const res = await ordersService.getAssignedForMe();
+        if (res?.success) {
+          const arr = Array.isArray(res.data) ? res.data : [];
+          // Show the newest assigned order if no popup active
+          if (!currentOrderPopup && arr.length) {
+            const latest = arr[0];
+            const order = {
+              id: latest._id,
+              customerName: 'New Booking',
+              partnerEarnings: latest.price ?? 0,
+              distance: (latest.distanceKm ?? 0) + ' km',
+              pickupLocation: { address: latest?.from?.address || '—' },
+              customerLocation: { address: latest?.to?.address || '—' },
+              parcelDetails: { description: `${latest.vehicleType || ''}`.trim() || 'Delivery' },
+              orderTime: latest.createdAt,
+              paymentMethod: 'Cash on Delivery',
+            };
+            await showNewOrderPopup(order);
+          }
+        }
+      } catch {}
+      timer = setTimeout(pollAssigned, 10000);
+    }
+    pollAssigned();
 
     return () => {
-      clearTimeout(initDelay);
-      setSimulationActive(false);
+      try { off && off(); } catch {}
+      try { leaveDriverRoom(driverId); } catch {}
+      try { clearTimeout(timer); } catch {}
     };
-  }, [isOnline]);
+  }, [isOnline, driverId, currentOrderPopup]);
 
   const showNewOrderPopup = useCallback(async (order) => {
     if (!isOnline) return;
@@ -54,7 +100,7 @@ const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
     });
   }, [isOnline, triggerOrderAlert]);
 
-  const handleOrderAccept = useCallback(() => {
+  const handleOrderAccept = useCallback(async () => {
     if (!currentOrderPopup) return;
 
     // Clear timeout
@@ -62,15 +108,39 @@ const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
       clearTimeout(currentOrderPopup.timeoutId);
     }
 
-    const acceptedOrder = { ...currentOrderPopup };
-    delete acceptedOrder.timeoutId;
-    delete acceptedOrder.showTime;
+    // Backend accept
+    try {
+      await ordersService.updateOrderStatus(currentOrderPopup.id, 'accepted');
+    } catch {}
 
-    // Set accepted order
-    setAcceptedOrder(acceptedOrder);
-    acceptOrder(acceptedOrder);
+    // Fetch full order to get customer phone and precise locations
+    let full = null;
+    try {
+      // use underlying client to get raw order with attached customer
+      full = await ordersService.client.get(`/orders/${currentOrderPopup.id}`);
+    } catch {}
 
-    // Clear popup
+    const accepted = { ...currentOrderPopup };
+    if (full) {
+      const coordsFrom = Array.isArray(full?.from?.location?.coordinates) ? full.from.location.coordinates : [];
+      const [fromLng, fromLat] = coordsFrom;
+      accepted.customerName = full?.customer?.name || accepted.customerName || 'Customer';
+      accepted.customerPhone = full?.customer?.phone || '—';
+      accepted.pickupLocation = {
+        address: full?.from?.address || accepted?.pickupLocation?.address || '—',
+        coordinates: (Number.isFinite(fromLat) && Number.isFinite(fromLng)) ? { lat: fromLat, lng: fromLng } : undefined,
+      };
+      accepted.customerLocation = {
+        address: full?.to?.address || accepted?.customerLocation?.address || '—',
+      };
+      accepted.partnerEarnings = Number(full?.price ?? accepted.partnerEarnings ?? 0);
+      accepted.distance = `${Number(full?.distanceKm ?? 0)} km`;
+    }
+    delete accepted.timeoutId;
+    delete accepted.showTime;
+
+    setAcceptedOrder(accepted);
+    acceptOrder(accepted);
     setCurrentOrderPopup(null);
   }, [currentOrderPopup, acceptOrder]);
 
@@ -197,7 +267,7 @@ const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
                   <p className="font-semibold">{currentOrderPopup.estimatedTime}</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-gray-500">Payment</p>
+                  <p className="text-sm text-gray-500">Payment</p>
                   <p className="font-semibold">{currentOrderPopup.paymentMethod === 'Cash on Delivery' ? 'COD' : 'Online'}</p>
                 </div>
               </div>

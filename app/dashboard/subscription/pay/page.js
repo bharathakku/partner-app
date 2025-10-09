@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, IndianRupee, CreditCard, QrCode, Check, Shield, Clock, Crown, Calendar } from "lucide-react"
 import BottomNav from "../../../../components/BottomNav"
 import { formatCurrency } from "../../../../lib/utils"
-import { getPlanById, formatSubscriptionDate, calculateExpiryDate } from "../../../../lib/subscription"
+import { getPlanById, calculateExpiryDate, getStoredSubscription, setStoredSubscription, formatSubscriptionDateTime } from "../../../../lib/subscription"
 
 function SubscriptionPayContent() {
   const router = useRouter()
@@ -26,8 +26,15 @@ function SubscriptionPayContent() {
   const [upiId, setUpiId] = useState("")
   const [card, setCard] = useState({ number: "", name: "", expiry: "", cvv: "" })
   
-  // Calculate subscription period
-  const activationDate = new Date()
+  // Calculate subscription period (renew starts after existing expiry if still active)
+  const now = new Date()
+  const existing = getStoredSubscription()
+  const baseStart = useMemo(() => {
+    if (!existing?.expiryDate) return now
+    const existingExpiry = new Date(existing.expiryDate)
+    return existingExpiry > now ? existingExpiry : now
+  }, [existing])
+  const activationDate = baseStart
   const expiryDate = plan ? calculateExpiryDate(activationDate, plan) : null
 
   const handleProceed = () => {
@@ -35,24 +42,25 @@ function SubscriptionPayContent() {
     if (typeof window !== 'undefined') {
       try {
         // Store subscription data in localStorage (in real app, this would be API calls)
+        const prev = existing || {}
+        const history = Array.isArray(prev.subscriptionHistory) ? prev.subscriptionHistory : []
+        const record = {
+          id: Date.now(),
+          planId: plan.id,
+          planName: plan.name,
+          amount: plan.price,
+          activationDate: activationDate.toISOString(),
+          expiryDate: expiryDate.toISOString(),
+          status: 'active'
+        }
         const subscriptionData = {
           currentPlan: plan,
           activationDate: activationDate.toISOString(),
           expiryDate: expiryDate.toISOString(),
           autoRenewal: false,
-          subscriptionHistory: [
-            {
-              id: Date.now(),
-              planId: plan.id,
-              planName: plan.name,
-              amount: plan.price,
-              activationDate: activationDate.toISOString(),
-              expiryDate: expiryDate.toISOString(),
-              status: 'active'
-            }
-          ]
+          subscriptionHistory: [...history, record]
         }
-        window.localStorage.setItem('partnerSubscription', JSON.stringify(subscriptionData))
+        setStoredSubscription(subscriptionData)
       } catch (e) {
         // ignore storage errors
       }
@@ -119,11 +127,11 @@ function SubscriptionPayContent() {
             </div>
             <div className="flex justify-between items-center mb-3">
               <span className="text-slate-600">Activation Date</span>
-              <span className="font-semibold text-slate-800">{formatSubscriptionDate(activationDate)}</span>
+              <span className="font-semibold text-slate-800">{formatSubscriptionDateTime(activationDate)}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-slate-600">Expiry Date</span>
-              <span className="font-semibold text-slate-800">{formatSubscriptionDate(expiryDate)}</span>
+              <span className="font-semibold text-slate-800">{formatSubscriptionDateTime(expiryDate)}</span>
             </div>
           </div>
           

@@ -7,7 +7,8 @@ import { Truck, Zap, ShieldCheck, IndianRupee, Package, Star, Phone, ArrowRight,
 import { validatePhoneNumber, formatPhoneNumber } from "../lib/utils"
 
 export default function Welcome() {
-  const [showSignUp, setShowSignUp] = useState(false)
+  const [showAuthForm, setShowAuthForm] = useState(false)
+  const [authMode, setAuthMode] = useState("signup") // "login" or "signup"
   const [phone, setPhone] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
@@ -38,7 +39,7 @@ export default function Welcome() {
     }
   }
   
-  const handleSignUp = async (e) => {
+  const handleAuth = async (e) => {
     e.preventDefault()
     setError("")
     
@@ -55,24 +56,34 @@ export default function Welcome() {
     setIsLoading(true)
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      
-      // Store phone number and mark as sign up
+      // Store phone number and auth mode
       localStorage.setItem("partner_phone", phone.replace(/\s/g, ""))
-      localStorage.setItem("auth_mode", "signup")
+      localStorage.setItem("auth_mode", authMode)
       
-      // Navigate to OTP verification
-      router.push("/auth/verify-otp")
+      // Redirect to external auth host to avoid internal route/middleware loops
+      if (typeof window !== 'undefined') {
+        window.location.href = `http://localhost:3002?mode=${authMode}`
+      }
     } catch (err) {
-      setError("Failed to send OTP. Please try again.")
+      setError("Failed to proceed. Please try again.")
     } finally {
       setIsLoading(false)
     }
   }
   
-  const handleLogin = () => {
-    router.push("/auth/login")
+  const handleShowLogin = () => {
+    // Navigate to dedicated auth route with login mode
+    router.push("/auth/login?mode=login")
+  }
+  
+  const handleShowSignup = () => {
+    // Navigate to dedicated auth route with signup mode
+    router.push("/auth/login?mode=signup") 
+  }
+  
+  const toggleAuthMode = () => {
+    setAuthMode(authMode === "login" ? "signup" : "login")
+    setError("")
   }
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-brand-50/30 flex flex-col justify-between p-6 relative overflow-hidden">
@@ -111,18 +122,22 @@ export default function Welcome() {
         </div>
 
         {/* Auth Section */}
-        {showSignUp ? (
+        {showAuthForm ? (
           <div className="space-y-6">
-            {/* Sign Up Form */}
+            {/* Auth Form */}
             <div className="feature-card p-6">
               <div className="text-center mb-6">
-                <h3 className="text-xl font-bold text-slate-800 mb-2">Join Our Platform</h3>
-                <p className="text-sm text-slate-600 mb-4">Start earning as a delivery partner today</p>
+                <h3 className="text-xl font-bold text-slate-800 mb-2">
+                  {authMode === "signup" ? "Join Our Platform" : "Welcome Back"}
+                </h3>
+                <p className="text-sm text-slate-600 mb-4">
+                  {authMode === "signup" ? "Start earning as a delivery partner today" : "Sign in to your partner account"}
+                </p>
               </div>
               
-              <form onSubmit={handleSignUp} className="space-y-4">
+              <form onSubmit={handleAuth} className="space-y-4">
                 <div>
-                  <label htmlFor="signup-phone" className="block text-sm font-medium text-slate-700 mb-2">
+                  <label htmlFor="auth-phone" className="block text-sm font-medium text-slate-700 mb-2">
                     📱 Mobile Number
                   </label>
                   <div className="relative">
@@ -130,7 +145,7 @@ export default function Welcome() {
                       <span className="text-slate-500 text-sm font-medium">+91</span>
                     </div>
                     <input
-                      id="signup-phone"
+                      id="auth-phone"
                       type="tel"
                       value={phone}
                       onChange={handlePhoneChange}
@@ -156,20 +171,35 @@ export default function Welcome() {
                   {isLoading ? (
                     <div className="flex items-center justify-center space-x-2">
                       <Loader2 className="w-5 h-5 animate-spin" />
-                      <span>Sending OTP...</span>
+                      <span>Processing...</span>
                     </div>
                   ) : (
                     <div className="flex items-center justify-center space-x-2">
                       <Phone className="w-5 h-5" />
-                      <span>Send OTP & Join Revolution</span>
+                      <span>{authMode === "signup" ? "Send OTP & Join Revolution" : "Send OTP & Login"}</span>
                     </div>
                   )}
                 </button>
               </form>
               
+              {/* Mode Toggle */}
+              <div className="text-center pt-4 border-t border-slate-200 mt-4">
+                <p className="text-sm text-slate-600 mb-2">
+                  {authMode === "signup" ? "Already have an account?" : "New to our platform?"}
+                </p>
+                <button
+                  type="button"
+                  onClick={toggleAuthMode}
+                  className="text-brand-600 hover:text-brand-700 font-medium text-sm underline"
+                  disabled={isLoading}
+                >
+                  {authMode === "signup" ? "Login instead" : "Sign up as Partner"}
+                </button>
+              </div>
+              
               <div className="mt-4 text-center">
                 <button
-                  onClick={() => setShowSignUp(false)}
+                  onClick={() => setShowAuthForm(false)}
                   className="text-sm text-slate-600 hover:text-slate-800 underline"
                 >
                   Back to main page
@@ -181,7 +211,7 @@ export default function Welcome() {
           <div className="space-y-4">
             {/* Sign Up Button */}
             <button
-              onClick={() => setShowSignUp(true)}
+              onClick={handleShowSignup}
               className="partner-button-primary w-full py-5 text-lg font-bold shadow-xl hover:shadow-2xl relative overflow-hidden group"
             >
               <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 transform -skew-x-12 translate-x-full group-hover:animate-pulse"></div>
@@ -197,7 +227,7 @@ export default function Welcome() {
             
             {/* Login Button */}
             <button
-              onClick={handleLogin}
+              onClick={handleShowLogin}
               className="w-full py-4 px-6 border-2 border-brand-200 bg-white/80 backdrop-blur-sm text-brand-700 font-semibold rounded-xl hover:bg-brand-50 hover:border-brand-300 transition-all duration-300 shadow-sm hover:shadow-md"
             >
               <div className="flex flex-col items-center justify-center space-y-1">

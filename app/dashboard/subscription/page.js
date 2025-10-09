@@ -1,15 +1,22 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Crown, Check, Star, Zap, IndianRupee } from "lucide-react"
+import { ArrowLeft, Crown, Check, Star, Zap, IndianRupee, CalendarDays, TimerReset } from "lucide-react"
 import BottomNav from "../../../components/BottomNav"
-import { getPlansArray } from "../../../lib/subscription"
+import { getPlansArray, getStoredSubscription, getPlanById, getSubscriptionStatus, formatSubscriptionDateTime, isSubscriptionActive } from "../../../lib/subscription"
 
 export default function SubscriptionPage() {
   const router = useRouter()
   const [selectedPlan, setSelectedPlan] = useState('weekly')
+  const [subscription, setSubscription] = useState(null)
+
+  // Load stored subscription (demo) on mount
+  useEffect(() => {
+    const sub = getStoredSubscription()
+    setSubscription(sub)
+  }, [])
 
   // Get subscription plans from lib
   const subscriptionPlans = getPlansArray()
@@ -21,6 +28,15 @@ export default function SubscriptionPage() {
   const handleContinue = () => {
     const plan = subscriptionPlans.find(p => p.id === selectedPlan)
     router.push(`/dashboard/subscription/pay?planId=${selectedPlan}&amount=${plan.price}`)
+  }
+
+  const hasSubscription = !!subscription && !!subscription.currentPlan
+  const status = useMemo(() => subscription ? getSubscriptionStatus(subscription) : { status: 'inactive', message: 'No active subscription' }, [subscription])
+
+  const handleRenew = () => {
+    if (!subscription?.currentPlan) return
+    const plan = getPlanById(subscription.currentPlan.id) || subscription.currentPlan
+    router.push(`/dashboard/subscription/pay?planId=${plan.id}&amount=${plan.price}`)
   }
 
   return (
@@ -42,6 +58,45 @@ export default function SubscriptionPage() {
       </div>
 
       <div className="p-6 space-y-6">
+        {/* Current Subscription Summary */}
+        {hasSubscription && (
+          <div className="partner-card p-6 border-brand-200">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <div className="text-xs uppercase text-slate-500">Current Plan</div>
+                <div className="text-lg font-bold text-slate-800">{subscription.currentPlan.name}</div>
+              </div>
+              <div className={`text-xs px-2 py-1 rounded-full ${status.status === 'active' ? 'bg-green-100 text-green-700' : status.status === 'expiring' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'}`}>
+                {status.message}
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-3 text-sm text-slate-700">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="w-4 h-4 text-slate-500" />
+                <span>Activated: <strong className="text-slate-900">{formatSubscriptionDateTime(subscription.activationDate)}</strong></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <TimerReset className="w-4 h-4 text-slate-500" />
+                <span>Ends on: <strong className="text-slate-900">{formatSubscriptionDateTime(subscription.expiryDate)}</strong></span>
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <button
+                onClick={handleRenew}
+                className="partner-button-primary w-full py-3 text-sm font-semibold"
+              >
+                Renew
+              </button>
+              <button
+                onClick={() => router.push('/dashboard/subscription')}
+                className="w-full py-3 text-sm font-semibold border border-slate-300 rounded-xl bg-white hover:bg-slate-50"
+              >
+                Change Plan
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Hero Section */}
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-gradient-to-r from-brand-500 to-brand-600 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -144,7 +199,7 @@ export default function SubscriptionPage() {
           onClick={handleContinue}
           className="partner-button-primary w-full py-4 text-lg font-semibold"
         >
-          Continue with {subscriptionPlans.find(p => p.id === selectedPlan)?.name} - ₹{subscriptionPlans.find(p => p.id === selectedPlan)?.price}
+          {hasSubscription ? 'Change / Extend Plan' : `Continue with ${subscriptionPlans.find(p => p.id === selectedPlan)?.name} - ₹${subscriptionPlans.find(p => p.id === selectedPlan)?.price}`}
         </button>
 
         {/* Footer Info */}

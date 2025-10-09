@@ -87,10 +87,21 @@ export default function CustomerLocationPage() {
   };
 
   const handleNavigation = () => {
-    // In real app, this would open maps app
-    const { lat, lng } = currentOrder.customerLocation.coordinates;
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-    window.open(url, '_blank');
+    // Open maps with coordinates if present; otherwise with address
+    const coords = currentOrder?.customerLocation?.coordinates
+    const addr = currentOrder?.customerLocation?.address
+    if (coords && typeof coords.lat === 'number' && typeof coords.lng === 'number') {
+      const { lat, lng } = coords
+      const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+      window.open(url, '_blank')
+      return
+    }
+    if (addr) {
+      const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`
+      window.open(url, '_blank')
+      return
+    }
+    alert('Customer location not available')
   };
 
   if (!currentOrder || currentOrder.status !== ORDER_STATUSES.PICKUP_COMPLETE) {
@@ -317,14 +328,14 @@ export default function CustomerLocationPage() {
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
                 <span className="text-sm font-semibold text-blue-600">
-                  {currentOrder.customerName.charAt(0)}
+                  {(currentOrder?.customerName || 'C').charAt(0)}
                 </span>
               </div>
               <div>
-                <p className="font-medium text-slate-800">{currentOrder.customerName}</p>
+                <p className="font-medium text-slate-800">{currentOrder?.customerName || 'Customer'}</p>
                 <div className="flex items-center space-x-1 text-sm text-slate-600">
                   <Phone className="w-3 h-3" />
-                  <span>{currentOrder.customerPhone}</span>
+                  <span>{currentOrder?.customerPhone || '—'}</span>
                 </div>
               </div>
             </div>

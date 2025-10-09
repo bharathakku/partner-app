@@ -22,10 +22,11 @@ export const viewport = {
 
 import { OrderProvider } from './contexts/OrderContext';
 import { ProfileProvider } from './contexts/ProfileContext';
+import GlobalOrderListener from '../components/GlobalOrderListener.jsx';
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={inter.variable} data-scroll-behavior="smooth">
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover" />
         <meta name="theme-color" content="#0c90f0" />
@@ -37,6 +38,8 @@ export default function RootLayout({ children }) {
         <OrderProvider>
           <ProfileProvider>
             {children}
+            {/* Global, cross-page order listener & popup */}
+            <GlobalOrderListener />
           </ProfileProvider>
         </OrderProvider>
       </body>

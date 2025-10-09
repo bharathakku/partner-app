@@ -11,7 +11,17 @@ export default function PhoneVerification() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [authMode, setAuthMode] = useState("login")
+  const [countryCode, setCountryCode] = useState("91")
   const router = useRouter()
+  // Normalize API base: prefer env, else current origin. Always include '/api'
+  const API_BASE = (() => {
+    const envBase = process.env.NEXT_PUBLIC_API_BASE_URL || ""
+    const base = (envBase && envBase.trim().length > 0)
+      ? envBase.trim().replace(/\/$/, "")
+      : (typeof window !== 'undefined' ? `${window.location.origin}` : "")
+    if (!base) return "/api" // fallback to relative api path
+    return base.endsWith("/api") ? base : `${base}/api`
+  })()
   
   useEffect(() => {
     // Check if this is a login or signup flow
@@ -24,29 +34,48 @@ export default function PhoneVerification() {
     setError("")
 
     if (!phone.trim()) {
-      setError("Please enter your phone number")
+      setError("7306550776")
       return
     }
 
     if (!validatePhoneNumber(phone.replace(/\s/g, ""))) {
-      setError("Please enter a valid 10-digit phone number")
+      setError("7306550776")
       return
     }
 
     setIsLoading(true)
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      
-      // Store phone number for next steps
-      localStorage.setItem("partner_phone", phone.replace(/\s/g, ""))
+      const cleanPhone = phone.replace(/\s/g, "")
+      const res = await fetch(`${API_BASE}/auth/phone/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: `+${countryCode}${cleanPhone}`, role: "partner" })
+      })
+      const data = await res.json()
+      if (!res.ok || !data.token) {
+        throw new Error(data.error || "Failed to send OTP")
+      }
+      // Debug log to help diagnose delivery issues
+      try { console.log("OTP send response:", data) } catch {}
+
+      // Store phone number and OTP token for next steps
+      localStorage.setItem("partner_phone", cleanPhone)
+      localStorage.setItem("partner_otp_token", data.token)
+      localStorage.setItem("partner_country_code", countryCode)
       localStorage.setItem("auth_mode", authMode)
-      
+
+      // If backend provided a devCode (e.g., SMS failed or in dev), store for auto-verify later
+      if (data.devCode) {
+        localStorage.setItem("partner_dev_code", String(data.devCode))
+      } else {
+        localStorage.removeItem("partner_dev_code")
+      }
+
       // Navigate to OTP verification
       router.push("/auth/verify-otp")
     } catch (err) {
-      setError("Failed to send OTP. Please try again.")
+      setError(err.message || "Failed to send OTP. Please try again.")
     } finally {
       setIsLoading(false)
     }
@@ -102,15 +131,23 @@ export default function PhoneVerification() {
               Phone Number
             </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <span className="text-slate-500 text-sm font-medium">+91</span>
+              <div className="absolute inset-y-0 left-0 pl-2 flex items-center">
+                <select
+                  aria-label="Country code"
+                  value={countryCode}
+                  onChange={e => setCountryCode(e.target.value.replace(/\D/g, ""))}
+                  className="h-10 bg-transparent text-slate-700 text-sm font-medium pr-2 focus:outline-none"
+                >
+                  <option value="91">+91</option>
+                  {/* Add more country codes here as needed */}
+                </select>
               </div>
               <input
                 id="phone"
                 type="tel"
                 value={phone}
                 onChange={handlePhoneChange}
-                className="partner-input pl-16 text-center text-lg font-semibold tracking-wider"
+                className="partner-input pl-20 text-center text-lg font-semibold tracking-wider"
                 placeholder="000 000 0000"
                 maxLength="12"
                 autoComplete="tel"
@@ -173,3 +210,4 @@ export default function PhoneVerification() {
     </div>
   )
 }
+

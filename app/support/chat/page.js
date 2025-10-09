@@ -6,117 +6,94 @@ import {
   ArrowLeft, Send, Paperclip, MoreVertical, 
   Phone, Video, User, Circle
 } from "lucide-react"
+import { connectSocket, joinChatThread, onChatMessage, emitChatMessage } from "@/lib/socket"
 
 export default function LiveChat() {
   const [message, setMessage] = useState("")
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      type: "received",
-      content: "Hello! I'm Sarah from Partner Support. How can I help you today?",
-      timestamp: new Date(Date.now() - 300000),
-      agent: {
-        name: "Sarah",
-        avatar: "S",
-        status: "online"
-      }
-    },
-    {
-      id: 2,
-      type: "sent",
-      content: "Hi, I have a question about my payment dues. Can you help me understand the daily charges?",
-      timestamp: new Date(Date.now() - 240000)
-    },
-    {
-      id: 3,
-      type: "received",
-      content: "Of course! I'd be happy to explain the daily charges. Our platform charges ₹30 per active day. This helps cover the technology, support, and services we provide to our partners.",
-      timestamp: new Date(Date.now() - 180000),
-      agent: {
-        name: "Sarah",
-        avatar: "S",
-        status: "online"
-      }
-    },
-    {
-      id: 4,
-      type: "received",
-      content: "You can pay these charges weekly or settle them anytime within 30 days. Would you like me to show you how to make a payment?",
-      timestamp: new Date(Date.now() - 120000),
-      agent: {
-        name: "Sarah",
-        avatar: "S",
-        status: "online"
-      }
-    },
-    {
-      id: 5,
-      type: "sent",
-      content: "Yes, that would be helpful. Also, can you tell me about the weekend bonuses?",
-      timestamp: new Date(Date.now() - 60000)
-    }
-  ])
-  
-  const [isTyping, setIsTyping] = useState(false)
+  const [messages, setMessages] = useState([])
+  const [threadId, setThreadId] = useState(null)
   const messagesEndRef = useRef(null)
+
+  // Init: connect socket, resolve user id and threadId, load history, subscribe
+  useEffect(() => {
+    const sock = connectSocket()
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('user_data') : null
+    let uid = null
+    try { uid = raw ? (JSON.parse(raw)?.id || JSON.parse(raw)?._id) : null } catch {}
+    if (!uid) return
+    const tid = `admin:${uid}`
+    setThreadId(tid)
+    joinChatThread(tid)
+
+    // Load history
+    const rawBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4001/api'
+    const apiBase = rawBase.endsWith('/api') ? rawBase : rawBase.replace(/\/$/, '') + '/api'
+    const token = (typeof window !== 'undefined') ? localStorage.getItem('auth_token') : null
+    const authHeader = token ? { Authorization: `Bearer ${token}` } : {}
+    fetch(`${apiBase}/chat/threads/${tid}/messages`, { credentials: 'include', headers: { ...authHeader } })
+      .then(r => r.json())
+      .then(items => {
+        const mapped = (items || []).map(m => ({
+          id: m._id,
+          type: m.fromUserId === uid ? 'sent' : 'received',
+          content: m.text,
+          timestamp: new Date(m.createdAt),
+        }))
+        setMessages(mapped)
+        scrollToBottom()
+      }).catch(() => {})
+
+    // Subscribe
+    const off = onChatMessage((msg) => {
+      if (msg.threadId !== tid) return
+      setMessages(prev => {
+        const exists = prev.some(m => (m._id || m.id) === (msg._id || msg.id))
+        if (exists) return prev
+        return [
+          ...prev,
+          {
+            _id: msg._id,
+            id: msg._id || `${Date.now()}`,
+            type: msg.fromUserId === uid ? 'sent' : 'received',
+            content: msg.text,
+            timestamp: new Date(msg.createdAt || Date.now()),
+          }
+        ]
+      })
+      scrollToBottom()
+    })
+    return () => { off && off() }
+  }, [])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }
 
-  useEffect(() => {
-    scrollToBottom()
-  }, [messages])
+  useEffect(() => { scrollToBottom() }, [messages])
 
-  const sendMessage = () => {
-    if (message.trim() === "") return
-    
-    const newMessage = {
-      id: messages.length + 1,
-      type: "sent",
-      content: message,
-      timestamp: new Date()
-    }
-    
-    setMessages(prev => [...prev, newMessage])
+  const sendMessage = async () => {
+    if (!message.trim() || !threadId) return
+    const text = message
     setMessage("")
-    setIsTyping(true)
-    
-    // Simulate agent response
-    setTimeout(() => {
-      setIsTyping(false)
-      const agentResponse = {
-        id: messages.length + 2,
-        type: "received",
-        content: getAgentResponse(message),
-        timestamp: new Date(),
-        agent: {
-          name: "Sarah",
-          avatar: "S",
-          status: "online"
-        }
-      }
-      setMessages(prev => [...prev, agentResponse])
-    }, 2000)
-  }
-
-  const getAgentResponse = (userMessage) => {
-    const responses = [
-      "Great question! Let me help you with that. Weekend bonuses are special incentives for partners who work during weekends. You can earn up to ₹500 extra by completing 15 deliveries over the weekend.",
-      "I understand your concern. Let me look into your account and provide you with specific details.",
-      "That's a common question among our partners. I'll send you a detailed explanation right after this chat.",
-      "Thank you for asking! I'm here to help you maximize your earnings and make the most of our platform.",
-      "Is there anything else I can help you with today? I'm here to ensure you have the best experience as our partner."
-    ]
-    return responses[Math.floor(Math.random() * responses.length)]
+    // Persist
+    try {
+      const rawBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4001/api'
+      const apiBase = rawBase.endsWith('/api') ? rawBase : rawBase.replace(/\/$/, '') + '/api'
+      const token = (typeof window !== 'undefined') ? localStorage.getItem('auth_token') : null
+      const authHeader = token ? { Authorization: `Bearer ${token}` } : {}
+      const res = await fetch(`${apiBase}/chat/threads/${threadId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeader },
+        credentials: 'include',
+        body: JSON.stringify({ text })
+      })
+      // Rely on backend socket broadcast; no local append
+      await res.json()
+    } catch {}
   }
 
   const formatTime = (date) => {
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    })
+    return new Date(date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
   }
 
   const handleKeyPress = (e) => {
@@ -168,18 +145,18 @@ export default function LiveChat() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50">
-        {messages.map((msg) => (
+        {messages.map((msg, idx) => (
           <div
-            key={msg.id}
+            key={(msg._id || msg.id || idx) + '-' + (msg.timestamp?.toString?.() || '')}
             className={`flex ${msg.type === 'sent' ? 'justify-end' : 'justify-start'}`}
           >
             <div className={`max-w-xs lg:max-w-md ${msg.type === 'sent' ? 'order-2' : 'order-1'}`}>
               {msg.type === 'received' && (
                 <div className="flex items-center space-x-2 mb-1">
                   <div className="w-6 h-6 bg-brand-500 rounded-full flex items-center justify-center">
-                    <span className="text-white text-xs font-semibold">{msg.agent.avatar}</span>
+                    <span className="text-white text-xs font-semibold">S</span>
                   </div>
-                  <span className="text-xs text-slate-500">{msg.agent.name}</span>
+                  <span className="text-xs text-slate-500">Support</span>
                 </div>
               )}
               
@@ -201,28 +178,6 @@ export default function LiveChat() {
             </div>
           </div>
         ))}
-        
-        {/* Typing Indicator */}
-        {isTyping && (
-          <div className="flex justify-start">
-            <div className="max-w-xs">
-              <div className="flex items-center space-x-2 mb-1">
-                <div className="w-6 h-6 bg-brand-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs font-semibold">S</span>
-                </div>
-                <span className="text-xs text-slate-500">Sarah</span>
-              </div>
-              
-              <div className="bg-white border border-slate-200 px-4 py-3 rounded-2xl">
-                <div className="flex items-center space-x-1">
-                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
         
         <div ref={messagesEndRef} />
       </div>
@@ -261,7 +216,7 @@ export default function LiveChat() {
         
         <div className="flex items-center justify-between mt-2 text-xs text-slate-500">
           <span>Press Enter to send</span>
-          <span>Sarah is online</span>
+          <span>Support is online</span>
         </div>
       </div>
     </div>

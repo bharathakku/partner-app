@@ -138,24 +138,40 @@ export default function KYCVerification() {
     setIsLoading(true)
     
     try {
-      // Simulate quick processing for free registration
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      // Store registration data
-      const registrationData = {
-        ...formData,
-        documents,
-        registrationFee: {
-          amount: 0,
-          paid: true,
-          paymentId: 'NO_FEE_REQUIRED'
-        },
-        registrationDate: new Date().toISOString()
+      // Upload documents to backend
+      const fd = new FormData()
+      // Append text KYC metadata
+      fd.append('fullName', formData.fullName || '')
+      fd.append('email', formData.email || '')
+      fd.append('aadharNumber', (formData.aadharNumber || '').replace(/\s/g, ''))
+      fd.append('panNumber', (formData.panNumber || '').toUpperCase())
+      fd.append('drivingLicense', (formData.drivingLicense || '').toUpperCase())
+      fd.append('vehicleNumber', (formData.vehicleNumber || '').replace(/\s/g, '').toUpperCase())
+      fd.append('vehicleType', formData.vehicleType || '')
+      if (documents.aadhar) fd.append('aadhar', documents.aadhar)
+      if (documents.pan) fd.append('pan', documents.pan)
+      if (documents.drivingLicense) fd.append('drivingLicense', documents.drivingLicense)
+      if (documents.vehicleRC) fd.append('vehicleRC', documents.vehicleRC)
+      if (documents.vehiclePicture) fd.append('vehiclePicture', documents.vehiclePicture)
+
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      // Normalize API base so it includes '/api' exactly once
+      const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4001'
+      const API_BASE = RAW_API_BASE.endsWith('/api') ? RAW_API_BASE : `${RAW_API_BASE.replace(/\/$/, '')}/api`
+      const res = await fetch(`${API_BASE}/drivers/me/kyc/upload`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: fd,
+        credentials: 'include'
+      })
+      if (!res.ok) {
+        let msg = 'Upload failed'
+        try { const j = await res.json(); msg = j.error || msg } catch {}
+        throw new Error(msg)
       }
-      
-      localStorage.setItem('partner_registration', JSON.stringify(registrationData))
-      
-      // Navigate to activation pending
+
+      // Simulate quick processing for free registration meta
+      await new Promise(resolve => setTimeout(resolve, 500))
       router.push("/auth/activation-pending")
     } catch (err) {
       setErrors({ submit: "Failed to complete registration. Please try again." })

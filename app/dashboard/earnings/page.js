@@ -18,7 +18,7 @@ export default function DetailedEarnings() {
       totalEarnings: 850,
       deliveryEarnings: 720,
       tips: 80,
-      incentives: 50,
+  // incentives: 50, (removed)
       orders: 8,
       hours: 6.5,
       averagePerOrder: 106.25,
@@ -28,7 +28,7 @@ export default function DetailedEarnings() {
       totalEarnings: 4200,
       deliveryEarnings: 3600,
       tips: 380,
-      incentives: 220,
+  // incentives: 220, (removed)
       orders: 42,
       hours: 35,
       averagePerOrder: 100,
@@ -38,7 +38,7 @@ export default function DetailedEarnings() {
       totalEarnings: 18500,
       deliveryEarnings: 15800,
       tips: 1650,
-      incentives: 1050,
+  // incentives: 1050, (removed)
       orders: 185,
       hours: 152,
       averagePerOrder: 100,
@@ -56,12 +56,7 @@ export default function DetailedEarnings() {
     { date: "2024-01-04", earnings: 600, orders: 5, hours: 4.5, tips: 40 }
   ])
 
-  const [incentiveBreakdown, setIncentiveBreakdown] = useState([
-    { type: "Weekend Bonus", amount: 500, description: "15 deliveries completed" },
-    { type: "Peak Hour Bonus", amount: 300, description: "4 hours during peak time" },
-    { type: "Rating Bonus", amount: 200, description: "Maintaining 4.8+ rating" },
-    { type: "Referral Bonus", amount: 100, description: "1 successful referral" }
-  ])
+  // Incentive breakdown removed
 
   const currentData = earningsData[selectedPeriod]
   const periodLabels = {
@@ -101,12 +96,7 @@ export default function DetailedEarnings() {
         percentage: ((currentData.tips / total) * 100).toFixed(1),
         color: "bg-success-500"
       },
-      {
-        category: "Incentives",
-        amount: currentData.incentives,
-        percentage: ((currentData.incentives / total) * 100).toFixed(1),
-        color: "bg-purple-500"
-      }
+      // Incentives removed from breakdown
     ]
   }
 
@@ -254,32 +244,7 @@ export default function DetailedEarnings() {
           </div>
         </div>
 
-        {/* Incentive Breakdown */}
-        <div className="partner-card p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-bold text-slate-800">Incentive Details</h3>
-            <Gift className="w-5 h-5 text-slate-600" />
-          </div>
-          
-          <div className="space-y-4">
-            {incentiveBreakdown.map((incentive, index) => (
-              <div key={index} className="flex items-center justify-between p-4 bg-purple-50 border border-purple-200 rounded-xl">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center">
-                    <Award className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-purple-800">{incentive.type}</h4>
-                    <p className="text-sm text-purple-600">{incentive.description}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold text-purple-700">{formatCurrency(incentive.amount)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        {/* Incentive Breakdown removed */}
 
         {/* Daily Breakdown (for week/month view) */}
         {selectedPeriod !== "today" && (

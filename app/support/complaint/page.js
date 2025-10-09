@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { 
   ArrowLeft, AlertTriangle, Send, Paperclip, 
@@ -19,52 +19,47 @@ export default function ComplaintPage() {
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const [existingComplaints, setExistingComplaints] = useState([
-    {
-      id: "CMP001234",
-      subject: "Payment not credited for order #ORD001230",
-      category: "Payment Issue",
-      status: "in_progress",
-      priority: "high",
-      createdDate: "2024-01-10T10:30:00Z",
-      lastUpdate: "2024-01-10T15:45:00Z",
-      assignedTo: "Support Team",
-      description: "My delivery payment for order #ORD001230 completed on 10th Jan has not been credited to my account."
-    },
-    {
-      id: "CMP001223",
-      subject: "App crashing during order acceptance",
-      category: "Technical Issue",
-      status: "resolved",
-      priority: "medium",
-      createdDate: "2024-01-08T14:20:00Z",
-      lastUpdate: "2024-01-09T11:30:00Z",
-      assignedTo: "Technical Team",
-      description: "The app crashes every time I try to accept an order. This is affecting my earnings."
-    },
-    {
-      id: "CMP001215",
-      subject: "Customer behavior complaint",
-      category: "Customer Issue",
-      status: "closed",
-      priority: "low",
-      createdDate: "2024-01-05T16:45:00Z",
-      lastUpdate: "2024-01-07T09:15:00Z",
-      assignedTo: "Customer Relations",
-      description: "Customer was rude and refused to pay the delivery charges as mentioned in the app."
-    }
-  ])
+  const [existingComplaints, setExistingComplaints] = useState([])
 
   const categories = [
-    "Payment Issue",
-    "Technical Issue", 
-    "Customer Issue",
-    "Account Problem",
-    "Order Related",
-    "App Bug",
-    "Safety Concern",
-    "Other"
+    { value: "payment", label: "Payment" },
+    { value: "documents", label: "Documents" },
+    { value: "technical", label: "Technical" },
+    { value: "training", label: "Training" },
+    { value: "vehicle", label: "Vehicle" },
+    { value: "other", label: "Other" },
   ]
+
+  const getApiBase = () => {
+    const raw = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4001/api'
+    return raw.endsWith('/api') ? raw : raw.replace(/\/$/, '') + '/api'
+  }
+
+  // Load my complaints from backend
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const apiBase = getApiBase()
+        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+        const authHeader = token ? { Authorization: `Bearer ${token}` } : {}
+        const res = await fetch(`${apiBase}/support/my`, { headers: { ...authHeader }, credentials: 'include' })
+        const data = await res.json()
+        const mapped = (data || []).map(t => ({
+          id: t._id,
+          subject: t.subject,
+          category: t.category,
+          status: t.status,
+          priority: t.priority,
+          createdDate: t.createdAt,
+          lastUpdate: t.updatedAt,
+          assignedTo: 'Support Team',
+          description: t.description || (t.messages?.[0]?.body) || ''
+        }))
+        setExistingComplaints(mapped)
+      } catch {}
+    }
+    load()
+  }, [activeTab])
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -106,26 +101,37 @@ export default function ComplaintPage() {
     }
 
     setIsSubmitting(true)
-    
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      // Add new complaint to the list
-      const newComplaint = {
-        id: `CMP${Date.now()}`,
-        subject: formData.subject,
-        category: formData.category,
-        status: "open",
-        priority: formData.priority,
-        createdDate: new Date().toISOString(),
-        lastUpdate: new Date().toISOString(),
-        assignedTo: "Support Team",
-        description: formData.description
-      }
-      
-      setExistingComplaints(prev => [newComplaint, ...prev])
-      
+      const apiBase = getApiBase()
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      const authHeader = token ? { Authorization: `Bearer ${token}` } : {}
+      const res = await fetch(`${apiBase}/support`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeader },
+        credentials: 'include',
+        body: JSON.stringify({
+          subject: formData.subject,
+          description: formData.description,
+          category: formData.category,
+          priority: formData.priority,
+          message: formData.description,
+        })
+      })
+      if (!res.ok) throw new Error('Failed to submit')
+      const created = await res.json()
+      // Prepend into list
+      setExistingComplaints(prev => [{
+        id: created._id,
+        subject: created.subject,
+        category: created.category,
+        status: created.status,
+        priority: created.priority,
+        createdDate: created.createdAt,
+        lastUpdate: created.updatedAt,
+        assignedTo: 'Support Team',
+        description: created.description
+      }, ...(prev||[])])
+
       // Reset form
       setFormData({
         category: "",
@@ -139,7 +145,6 @@ export default function ComplaintPage() {
       setActiveTab("complaints")
       
       alert("Complaint submitted successfully! You will receive updates via notifications.")
-      
     } catch (error) {
       alert("Failed to submit complaint. Please try again.")
     } finally {
@@ -216,9 +221,9 @@ export default function ComplaintPage() {
                     required
                   >
                     <option value="">Select a category</option>
-                    {categories.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
+                    {categories.map((c) => (
+                      <option key={c.value} value={c.value}>
+                        {c.label}
                       </option>
                     ))}
                   </select>

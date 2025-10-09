@@ -10,6 +10,7 @@ import {
   Banknote, Smartphone, Home, Trophy
 } from 'lucide-react';
 import CameraCapture from '../../../components/CameraCapture';
+import { ordersService } from '../../../lib/api/apiClient';
 
 export default function CompleteOrderPage() {
   const router = useRouter();
@@ -17,12 +18,15 @@ export default function CompleteOrderPage() {
   const [completingOrder, setCompletingOrder] = useState(false);
   const [paymentCollected, setPaymentCollected] = useState(false);
   const [deliveryPhoto, setDeliveryPhoto] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [proofUrl, setProofUrl] = useState('');
   const [customerRating, setCustomerRating] = useState(0);
   const [orderCompleted, setOrderCompleted] = useState(false);
+  const [completedInfo, setCompletedInfo] = useState(null); // snapshot for success screen
 
-  // Redirect if no current order or wrong status
   useEffect(() => {
-    if (!currentOrder || currentOrder.status !== ORDER_STATUSES.CUSTOMER_REACHED) {
+    const ok = currentOrder && (currentOrder.status === ORDER_STATUSES.CUSTOMER_REACHED || currentOrder.status === ORDER_STATUSES.PAID)
+    if (!ok) {
       router.push('/orders');
     }
   }, [currentOrder, router, ORDER_STATUSES]);
@@ -34,22 +38,55 @@ export default function CompleteOrderPage() {
     processPayment();
   };
 
-  const handleDeliveryImageCaptured = (file, images) => {
-    console.log('Delivery photo captured:', file.name);
-    setDeliveryPhoto(true);
+  const handleDeliveryImageCaptured = async (file, images) => {
+    if (!currentOrder?.id || !file) return;
+    try {
+      setUploading(true);
+      // Show local preview immediately if available
+      try {
+        const first = Array.isArray(images) && images.length ? images[0] : null;
+        if (first?.preview) setProofUrl(first.preview);
+      } catch {}
+      const formData = new FormData();
+      formData.append('proof', file);
+      formData.append('type', 'delivery');
+      const res = await ordersService.client.request(`/orders/${currentOrder.id}/proof`, {
+        method: 'POST',
+        body: formData,
+        headers: {},
+      });
+      if (res?.url) setProofUrl(res.url);
+      setDeliveryPhoto(true);
+    } catch (e) {
+      console.error('Delivery photo upload failed', e);
+      alert('Failed to upload delivery photo. Please try again.');
+    } finally {
+      setUploading(false);
+    }
   };
 
-  const handleDeliveryImageUploaded = (result, images) => {
-    console.log('Delivery photo uploaded:', result);
-    // Could store upload result to order data here
-  };
+  // No mock uploader; we upload to backend in handleDeliveryImageCaptured
 
   const handleCompleteOrder = async () => {
     setCompletingOrder(true);
     
     // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
+    await new Promise(resolve => setTimeout(resolve, 500));
+    // Update backend status to delivered so customers/admins are notified
+    try {
+      await ordersService.client.patch(`/orders/${currentOrder.id}/status`, { status: 'delivered' });
+    } catch (e) {
+      console.error('Failed to set delivered status', e);
+      // continue locally to avoid blocking driver
+    }
+    // Snapshot details for success screen before context clears currentOrder
+    setCompletedInfo({
+      id: currentOrder?.id,
+      partnerEarnings: currentOrder?.partnerEarnings ?? 0,
+      orderValue: currentOrder?.orderValue ?? 0,
+      paymentMethod: currentOrder?.paymentMethod || '—',
+    })
+
     completeOrder();
     setOrderCompleted(true);
     
@@ -66,7 +103,7 @@ export default function CompleteOrderPage() {
     return deliveryPhoto;
   };
 
-  if (!currentOrder || currentOrder.status !== ORDER_STATUSES.CUSTOMER_REACHED) {
+  if (!currentOrder || (currentOrder.status !== ORDER_STATUSES.CUSTOMER_REACHED && currentOrder.status !== ORDER_STATUSES.PAID)) {
     return null; // Will redirect
   }
 
@@ -83,9 +120,17 @@ export default function CompleteOrderPage() {
           <div className="bg-white rounded-xl p-6 mb-6">
             <div className="flex items-center justify-center space-x-2 text-2xl font-bold text-success-600 mb-2">
               <IndianRupee className="w-6 h-6" />
-              <span>{currentOrder.partnerEarnings}</span>
+              <span>{completedInfo?.partnerEarnings ?? 0}</span>
             </div>
             <p className="text-sm text-slate-600">Earnings added to your account</p>
+            <div className="mt-4 text-slate-800">
+              <p className="text-sm">Total Amount Charged</p>
+              <div className="flex items-center justify-center text-xl font-semibold">
+                <IndianRupee className="w-5 h-5" />
+                <span>{completedInfo?.orderValue ?? 0}</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">Method: {completedInfo?.paymentMethod}</p>
+            </div>
           </div>
           
           <div className="flex items-center justify-center space-x-1 text-sm text-success-600">
@@ -152,7 +197,7 @@ export default function CompleteOrderPage() {
               <p className="text-sm text-green-700">{currentOrder.customerLocation.address}</p>
               <div className="flex items-center space-x-2 text-sm text-green-600 mt-1">
                 <Clock className="w-3 h-3" />
-                <span>Arrived at {formatTime(currentOrder.customer_reachedAt)}</span>
+                <span>Arrived at {currentOrder?.customer_reachedAt ? formatTime(currentOrder.customer_reachedAt) : formatTime(new Date())}</span>
               </div>
             </div>
           </div>
@@ -187,14 +232,14 @@ export default function CompleteOrderPage() {
               <div className="flex items-center space-x-3">
                 <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                   <span className="text-sm font-semibold text-blue-600">
-                    {currentOrder.customerName.charAt(0)}
+                    {(currentOrder?.customerName || 'C').charAt(0)}
                   </span>
                 </div>
                 <div>
-                  <p className="font-medium text-slate-800">{currentOrder.customerName}</p>
+                  <p className="font-medium text-slate-800">{currentOrder?.customerName || 'Customer'}</p>
                   <div className="flex items-center space-x-1 text-sm text-slate-600">
                     <Phone className="w-3 h-3" />
-                    <span>{currentOrder.customerPhone}</span>
+                    <span>{currentOrder?.customerPhone || '—'}</span>
                   </div>
                 </div>
               </div>
@@ -220,17 +265,22 @@ export default function CompleteOrderPage() {
                 description="Take a photo of order handover to customer"
                 required={true}
                 onImageCaptured={handleDeliveryImageCaptured}
-                onImageUploaded={handleDeliveryImageUploaded}
               />
+              {uploading && (
+                <p className="text-xs text-slate-500 mt-2">Uploading photo...</p>
+              )}
+              {proofUrl && (
+                <div className="mt-2">
+                  <img src={proofUrl} alt="Delivery proof" className="max-h-40 rounded border" />
+                </div>
+              )}
             </div>
 
             {/* Payment Collection (Only for COD) */}
             {currentOrder.paymentMethod === 'Cash on Delivery' && (
               <div 
                 className={`flex items-center space-x-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                  paymentCollected 
-                    ? 'bg-green-50 border-green-200' 
-                    : 'bg-amber-50 border-amber-200 hover:bg-amber-100'
+                  paymentCollected ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200 hover:bg-amber-100'
                 }`}
                 onClick={handlePaymentCollection}
               >
@@ -279,11 +329,11 @@ export default function CompleteOrderPage() {
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <h4 className="font-semibold text-slate-800 mb-3 flex items-center">
             <Package className="w-5 h-5 mr-2 text-slate-600" />
-            Delivered Items ({currentOrder.items.length})
+            Delivered Items ({(currentOrder.items || []).length})
           </h4>
           
           <div className="space-y-2">
-            {currentOrder.items.map((item, index) => (
+            {(currentOrder.items || []).map((item, index) => (
               <div key={index} className="flex items-center justify-between py-2 px-3 bg-green-50 rounded-lg border border-green-200">
                 <div className="flex items-center space-x-3">
                   <div className="w-6 h-6 bg-green-500 rounded flex items-center justify-center">

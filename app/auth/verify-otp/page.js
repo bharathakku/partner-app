@@ -14,13 +14,28 @@ export default function VerifyOTP() {
   const [canResend, setCanResend] = useState(false)
   const [phone, setPhone] = useState("")
   const [authMode, setAuthMode] = useState("login")
+  const [countryCode, setCountryCode] = useState("91")
+  const [usingDevCode, setUsingDevCode] = useState(false)
   const inputRefs = useRef([])
   const router = useRouter()
+  // Normalize API base: prefer env, else current origin. Always include '/api'
+  const API_BASE = (() => {
+    const envBase = process.env.NEXT_PUBLIC_API_BASE_URL || ""
+    const base = (envBase && envBase.trim().length > 0)
+      ? envBase.trim().replace(/\/$/, "")
+      : (typeof window !== 'undefined' ? `${window.location.origin}` : "")
+    if (!base) return "/api"
+    return base.endsWith("/api") ? base : `${base}/api`
+  })()
+  const [otpToken, setOtpToken] = useState("")
 
   useEffect(() => {
     // Get phone number and auth mode from localStorage
     const storedPhone = localStorage.getItem("partner_phone")
     const storedAuthMode = localStorage.getItem("auth_mode") || "login"
+    const storedToken = localStorage.getItem("partner_otp_token") || ""
+    const storedCc = localStorage.getItem("partner_country_code") || "91"
+    const storedDevCode = localStorage.getItem("partner_dev_code") || ""
     
     if (!storedPhone) {
       router.push("/auth/phone")
@@ -29,6 +44,14 @@ export default function VerifyOTP() {
     
     setPhone(storedPhone)
     setAuthMode(storedAuthMode)
+    setCountryCode(storedCc)
+    setOtpToken(storedToken)
+
+    // If backend provided a devCode (SMS not sent), auto-verify for faster testing
+    if (storedDevCode && storedDevCode.length === 6) {
+      setUsingDevCode(true)
+      setTimeout(() => handleVerify(String(storedDevCode)), 200)
+    }
 
     // Start countdown timer
     const timer = setInterval(() => {
@@ -81,30 +104,34 @@ export default function VerifyOTP() {
     setError("")
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      // For demo purposes, accept any 6-digit code
-      if (otpCode.length === 6) {
-        if (authMode === "signup") {
-          // New user signup - always go to KYC
-          router.push("/auth/kyc")
-        } else {
-          // Existing user login - check activation status
-          const isActivated = Math.random() > 0.3 // 70% chance of being activated
-          
-          if (isActivated) {
-            localStorage.setItem("partner_authenticated", "true")
-            router.push("/dashboard")
-          } else {
-            router.push("/auth/activation-pending")
-          }
-        }
+      if (!otpToken) {
+        setError("OTP session expired. Please request a new code.")
+        return
+      }
+
+      const res = await fetch(`${API_BASE}/auth/phone/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: otpToken, code: otpCode, role: "partner" })
+      })
+      const data = await res.json()
+      if (!res.ok || !data.token) {
+        throw new Error(data.error || "Invalid verification code")
+      }
+
+      // Persist auth
+      localStorage.setItem("auth_token", data.token)
+      localStorage.setItem("user_data", JSON.stringify(data.user))
+      localStorage.setItem("partner_authenticated", "true")
+
+      // Navigate post-login
+      if (authMode === "signup") {
+        router.push("/auth/kyc")
       } else {
-        setError("Invalid verification code")
+        router.push("/dashboard")
       }
     } catch (err) {
-      setError("Verification failed. Please try again.")
+      setError(err.message || "Verification failed. Please try again.")
     } finally {
       setIsLoading(false)
     }
@@ -115,18 +142,34 @@ export default function VerifyOTP() {
 
     setIsLoading(true)
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      // Reset timer
+      const res = await fetch(`${API_BASE}/auth/phone/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: `+${countryCode}${phone}`, role: "partner" })
+      })
+      const data = await res.json()
+      if (!res.ok || !data.token) throw new Error(data.error || "Failed to resend code")
+
+      // Save new OTP token
+      setOtpToken(data.token)
+      localStorage.setItem("partner_otp_token", data.token)
+
+      // Update dev code info from backend if provided
+      if (data.devCode) {
+        localStorage.setItem("partner_dev_code", String(data.devCode))
+        setUsingDevCode(true)
+      } else {
+        localStorage.removeItem("partner_dev_code")
+        setUsingDevCode(false)
+      }
+
+      // Reset timer and inputs
       setResendTimer(30)
       setCanResend(false)
-      
-      // Clear current OTP
       setOtp(["", "", "", "", "", ""])
       inputRefs.current[0]?.focus()
-      
-      // Start countdown
+
+      // Restart countdown
       const timer = setInterval(() => {
         setResendTimer((prev) => {
           if (prev <= 1) {
@@ -139,7 +182,7 @@ export default function VerifyOTP() {
       }, 1000)
       
     } catch (err) {
-      setError("Failed to resend code. Please try again.")
+      setError(err.message || "Failed to resend code. Please try again.")
     } finally {
       setIsLoading(false)
     }
@@ -173,8 +216,11 @@ export default function VerifyOTP() {
             }
           </p>
           <p className="text-brand-600 font-semibold text-lg">
-            +91 {formatPhoneNumber(phone)}
+            +{countryCode} {formatPhoneNumber(phone)}
           </p>
+          {usingDevCode && (
+            <p className="mt-2 text-xs text-slate-500">Using development code from server for testing</p>
+          )}
         </div>
 
         <form onSubmit={(e) => { e.preventDefault(); handleVerify(); }} className="space-y-6">

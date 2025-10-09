@@ -9,6 +9,7 @@ import {
   Store, Timer, IndianRupee, HelpCircle
 } from 'lucide-react';
 import HelpSupportModal from '../../../components/HelpSupportModal';
+import { connectSocket, emitDriverLocation } from '../../../lib/socket';
 
 export default function PickupLocationPage() {
   const router = useRouter();
@@ -59,24 +60,31 @@ export default function PickupLocationPage() {
 
   // Simulate getting current location
   useEffect(() => {
+    if (!currentOrder) return
+    // Connect socket once
+    connectSocket()
+    let watchId = null
     if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setCurrentLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          });
-        },
-        (error) => {
-          // Fallback to demo location
-          setCurrentLocation({
-            lat: 12.9715,
-            lng: 77.6364
-          });
-        }
-      );
+      try {
+        watchId = navigator.geolocation.watchPosition(
+          (position) => {
+            const lat = position.coords.latitude
+            const lng = position.coords.longitude
+            setCurrentLocation({ lat, lng })
+            // Emit to backend so customers in order room get updates
+            emitDriverLocation({ orderId: currentOrder.id, lat, lng, heading: null, speed: null })
+          },
+          () => {
+            // ignore errors
+          },
+          { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+        )
+      } catch {}
     }
-  }, []);
+    return () => {
+      try { if (watchId != null) navigator.geolocation.clearWatch(watchId) } catch {}
+    }
+  }, [currentOrder]);
 
   const handleReachedLocation = async () => {
     setReachingLocation(true);
@@ -88,16 +96,37 @@ export default function PickupLocationPage() {
     router.push('/orders/pickup-complete');
   };
 
+  const handleCallCustomer = () => {
+    const phone = currentOrder?.customerPhone
+    if (phone && typeof window !== 'undefined') {
+      try { window.location.href = `tel:${phone}` } catch {}
+      return
+    }
+    alert('Customer phone not available')
+  };
+
   const handleCallSender = () => {
     // In real app, this would make a phone call
-    alert(`Calling ${currentOrder.senderName}...`);
+    const name = currentOrder?.senderName || currentOrder?.customerName || 'customer'
+    alert(`Calling ${name}...`);
   };
 
   const handleNavigation = () => {
-    // In real app, this would open maps app
-    const { lat, lng } = currentOrder.pickupLocation.coordinates;
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-    window.open(url, '_blank');
+    // Open maps with coordinates if present; otherwise with address
+    const coords = currentOrder?.pickupLocation?.coordinates
+    const addr = currentOrder?.pickupLocation?.address
+    if (coords && typeof coords.lat === 'number' && typeof coords.lng === 'number') {
+      const { lat, lng } = coords
+      const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+      window.open(url, '_blank')
+      return
+    }
+    if (addr) {
+      const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`
+      window.open(url, '_blank')
+      return
+    }
+    alert('Pickup location not available')
   };
 
   if (!currentOrder) {
@@ -165,10 +194,10 @@ export default function PickupLocationPage() {
                 <Package className="w-5 h-5 text-brand-600" />
               </div>
               <div>
-                <h3 className="font-semibold text-slate-800">{currentOrder.id}</h3>
+                <h3 className="font-semibold text-slate-800">{currentOrder?.id || '—'}</h3>
                 <div className="flex items-center space-x-2 text-sm text-slate-600">
                   <Clock className="w-4 h-4" />
-                  <span>Accepted at {formatTime(currentOrder.acceptedAt)}</span>
+                  <span>Accepted at {currentOrder?.acceptedAt ? formatTime(currentOrder.acceptedAt) : '—'}</span>
                 </div>
               </div>
             </div>
@@ -186,23 +215,31 @@ export default function PickupLocationPage() {
             <div className="flex items-center space-x-3">
               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                 <span className="text-sm font-semibold text-blue-600">
-                  {currentOrder.customerName.charAt(0)}
+                  {(currentOrder?.customerName || 'C').charAt(0)}
                 </span>
               </div>
               <div>
-                <p className="font-medium text-slate-800">{currentOrder.customerName}</p>
+                <p className="font-medium text-slate-800">{currentOrder?.customerName || 'Customer'}</p>
                 <div className="flex items-center space-x-1 text-sm text-slate-600">
                   <Phone className="w-3 h-3" />
-                  <span>{currentOrder.customerPhone}</span>
+                  <span>{currentOrder?.customerPhone || '—'}</span>
                 </div>
               </div>
             </div>
             <div className="text-right">
               <div className="flex items-center text-slate-700">
                 <Navigation className="w-4 h-4 mr-1" />
-                <span className="font-medium">{currentOrder.distance}</span>
+                <span className="font-medium">{currentOrder?.distance || '—'}</span>
               </div>
-              <p className="text-xs text-slate-500">{currentOrder.estimatedTime}</p>
+              <p className="text-xs text-slate-500">{currentOrder?.estimatedTime || '—'}</p>
+              <div className="mt-2">
+                <button
+                  onClick={handleCallCustomer}
+                  className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-xs font-semibold hover:bg-green-200"
+                >
+                  Call Customer
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -244,7 +281,7 @@ export default function PickupLocationPage() {
               </div>
               <div className="flex-1">
                 <h3 className="font-semibold text-slate-800 mb-1">Pickup Location</h3>
-                <p className="text-slate-600 mb-2">{currentOrder.pickupLocation.address}</p>
+                <p className="text-slate-600 mb-2">{currentOrder?.pickupLocation?.address || '—'}</p>
                 
                 {/* Sender Contact */}
                 <div className="flex items-center space-x-3">
@@ -285,7 +322,7 @@ export default function PickupLocationPage() {
                   currentOrder.parcelDetails.fragile ? 'bg-amber-500' : 'bg-green-500'
                 }`}></div>
                 <span className="font-semibold text-slate-800">
-                  {currentOrder.parcelDetails.type}
+                  {currentOrder?.parcelDetails?.type || 'Parcel'}
                 </span>
                 {currentOrder.parcelDetails.fragile && (
                   <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">
@@ -293,17 +330,17 @@ export default function PickupLocationPage() {
                   </span>
                 )}
               </div>
-              <span className="text-sm font-medium text-slate-600">{currentOrder.parcelDetails.weight}</span>
+              <span className="text-sm font-medium text-slate-600">{currentOrder?.parcelDetails?.weight || '—'}</span>
             </div>
-            <p className="text-slate-700 mb-2">{currentOrder.parcelDetails.description}</p>
+            <p className="text-slate-700 mb-2">{currentOrder?.parcelDetails?.description || 'Delivery'}</p>
             <div className="grid grid-cols-2 gap-4 text-sm text-slate-600">
               <div>
                 <span className="text-xs text-slate-500">Dimensions:</span>
-                <p className="font-medium">{currentOrder.parcelDetails.dimensions}</p>
+                <p className="font-medium">{currentOrder?.parcelDetails?.dimensions || '—'}</p>
               </div>
               <div>
                 <span className="text-xs text-slate-500">Declared Value:</span>
-                <p className="font-medium">₹{currentOrder.parcelDetails.value.toLocaleString()}</p>
+                <p className="font-medium">₹{Number(currentOrder?.parcelDetails?.value ?? currentOrder?.orderValue ?? 0).toLocaleString()}</p>
               </div>
             </div>
           </div>
@@ -314,8 +351,8 @@ export default function PickupLocationPage() {
               <Store className="w-4 h-4 text-blue-600" />
               <span className="text-sm font-semibold text-blue-800">Sender Details</span>
             </div>
-            <p className="text-sm font-medium text-slate-800">{currentOrder.senderName}</p>
-            <p className="text-xs text-slate-600">{currentOrder.senderPhone}</p>
+            <p className="text-sm font-medium text-slate-800">{currentOrder?.senderName || '—'}</p>
+            <p className="text-xs text-slate-600">{currentOrder?.senderPhone || '—'}</p>
           </div>
 
           {/* Delivery Instructions */}
@@ -329,16 +366,16 @@ export default function PickupLocationPage() {
           <div className="border-t border-slate-200 pt-3 mt-3">
             <div className="flex items-center justify-between">
               <span className="font-medium text-slate-800">
-                {currentOrder.paymentMethod === 'Cash on Delivery' ? 'COD Amount' : 'Parcel Value'}
+                {(currentOrder?.paymentMethod === 'Cash on Delivery') ? 'COD Amount' : 'Parcel Value'}
               </span>
               <div className="flex items-center font-semibold text-slate-800">
                 <IndianRupee className="w-4 h-4" />
-                <span>{currentOrder.paymentMethod === 'Cash on Delivery' ? currentOrder.codAmount : currentOrder.orderValue}</span>
+                <span>{(currentOrder?.paymentMethod === 'Cash on Delivery') ? (currentOrder?.codAmount ?? 0) : (currentOrder?.orderValue ?? (currentOrder?.parcelDetails?.value ?? 0))}</span>
               </div>
             </div>
             <div className="flex items-center justify-between mt-1 text-sm text-slate-500">
               <span>Payment Method</span>
-              <span className="font-medium">{currentOrder.paymentMethod}</span>
+              <span className="font-medium">{currentOrder?.paymentMethod || '—'}</span>
             </div>
           </div>
         </div>

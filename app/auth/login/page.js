@@ -1,96 +1,163 @@
 "use client"
 
-import { useState } from "react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { ArrowLeft, Phone, Loader2, AlertCircle, User } from "lucide-react"
-import { validatePhoneNumber, formatPhoneNumber } from "../../../lib/utils"
+import { useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import OTPInput from "@/components/OTPInput"
+import { Loader2, Phone, ArrowLeft } from "lucide-react"
 
 export default function LoginPage() {
   const [phone, setPhone] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
+  const [step, setStep] = useState("phone")
+  const [mode, setMode] = useState("login") // "login" or "signup"
+  const [otpSessionToken, setOtpSessionToken] = useState("")
   const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [isVerifying, setIsVerifying] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  
+  // Normalize API base: prefer env, else current origin. Always include '/api'
+  const API_BASE = (() => {
+    const envBase = process.env.NEXT_PUBLIC_API_BASE_URL || ""
+    const base = (envBase && envBase.trim().length > 0)
+      ? envBase.trim().replace(/\/$/, "")
+      : (typeof window !== 'undefined' ? `${window.location.origin}` : "")
+    if (!base) return "/api"
+    return base.endsWith("/api") ? base : `${base}/api`
+  })()
 
-  const handlePhoneChange = (value) => {
-    const cleanValue = value.replace(/\D/g, "")
-    if (cleanValue.length <= 10) {
-      setPhone(formatPhoneNumber(cleanValue))
-      setError("")
+  // Initialize mode from URL params or localStorage
+  useEffect(() => {
+    const urlMode = searchParams.get('mode')
+    const storedMode = localStorage.getItem('auth_mode')
+    const storedPhone = localStorage.getItem('partner_phone')
+    
+    if (urlMode && (urlMode === 'login' || urlMode === 'signup')) {
+      setMode(urlMode)
+    } else if (storedMode && (storedMode === 'login' || storedMode === 'signup')) {
+      setMode(storedMode)
+    }
+    
+    if (storedPhone) {
+      setPhone(storedPhone)
+    }
+  }, [searchParams])
+
+  const validatePhone = () => /^\d{10}$/.test(phone)
+
+  const routeAfterAuth = async (jwt) => {
+    try {
+      const res = await fetch(`${API_BASE}/drivers/me`, {
+        headers: { Authorization: `Bearer ${jwt}` },
+        credentials: 'include'
+      })
+      if (!res.ok) {
+        // 401/403 -> token valid but not eligible for /drivers/me yet
+        if (res.status === 401 || res.status === 403) {
+          router.replace(mode === "signup" ? "/auth/kyc" : "/dashboard")
+          return
+        }
+        // Other errors: assume no profile yet
+        router.replace(mode === "signup" ? "/auth/kyc" : "/dashboard")
+        return
+      }
+      const driver = await res.json()
+      // If driver object missing/null, still take them to dashboard for login (signup -> KYC)
+      if (!driver) {
+        router.replace(mode === "signup" ? "/auth/kyc" : "/dashboard")
+        return
+      }
+      try { localStorage.setItem('driver_profile', JSON.stringify(driver)) } catch {}
+      // Profile exists -> go to main dashboard
+      router.replace("/dashboard")
+    } catch {
+      router.replace(mode === "signup" ? "/auth/kyc" : "/dashboard")
     }
   }
 
-  const validateForm = () => {
-    if (!phone.trim()) {
-      setError("Please enter your phone number")
-      return false
+  const handleVerifyOTP = async (enteredOtp) => {
+    setError("")
+    setSuccess("")
+    setIsVerifying(true)
+    try {
+      const res = await fetch(`${API_BASE}/auth/phone/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: otpSessionToken, code: enteredOtp, role: "driver" })
+      })
+      const data = await res.json()
+      if (!res.ok || !data.token) throw new Error(data.error || "Invalid OTP")
+      setSuccess(mode === "signup" ? "Account created successfully!" : "Login successful!")
+      localStorage.setItem("auth_token", data.token)
+      localStorage.setItem("user_data", JSON.stringify(data.user))
+      await routeAfterAuth(data.token)
+    } catch (err) {
+      setError(err.message || "An error occurred while verifying OTP")
+    } finally {
+      setIsVerifying(false)
     }
-    if (!validatePhoneNumber(phone.replace(/\s/g, ""))) {
-      setError("Please enter a valid 10-digit phone number")
-      return false
-    }
-    
-    return true
+  }
+
+  const handleBack = () => {
+    setStep("phone")
+    setError("")
+    setSuccess("")
+  }
+
+  const toggleMode = () => {
+    setMode(mode === "login" ? "signup" : "login")
+    setError("")
+    setSuccess("")
+    setStep("phone")
   }
 
   const handleSendOTP = async (e) => {
     e.preventDefault()
-    
-    if (!validateForm()) return
-    
+    setError("")
+    setSuccess("")
+    if (!validatePhone()) {
+      setError("Enter a valid 10-digit phone number")
+      return
+    }
     setIsLoading(true)
-    
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      
-      // Store phone number and mark as login
-      localStorage.setItem("partner_phone", phone.replace(/\s/g, ""))
-      localStorage.setItem("auth_mode", "login")
-      
-      // Navigate to OTP verification
-      router.push("/auth/verify-otp")
+      const res = await fetch(`${API_BASE}/auth/phone/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: "+91" + phone, role: "driver" })
+      })
+      const data = await res.json()
+      if (!res.ok || !data.token) throw new Error(data.error || "Failed to send OTP")
+      setOtpSessionToken(data.token)
+      setSuccess(`OTP sent to your phone! ${mode === "signup" ? "Complete signup by verifying." : ""}`)
+      setStep("otp")
+      if (data.devCode) {
+        try { setTimeout(() => handleVerifyOTP(String(data.devCode)), 200) } catch {}
+      }
     } catch (err) {
-      setError("Failed to send OTP. Please try again.")
+      setError(err.message || "An error occurred while sending OTP")
     } finally {
       setIsLoading(false)
     }
   }
 
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-50 via-white to-brand-100 flex flex-col p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between pt-4 mb-8">
-        <Link href="/" className="p-2 hover:bg-white/50 rounded-lg transition-colors">
-          <ArrowLeft className="w-6 h-6 text-slate-600" />
-        </Link>
-        <h1 className="text-lg font-semibold text-slate-800">Partner Login</h1>
-        <div className="w-10"></div>
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col justify-center max-w-md mx-auto w-full">
-        {/* Welcome Section */}
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-gradient-to-r from-brand-500 to-brand-600 rounded-full flex items-center justify-center mx-auto mb-6">
-            <User className="w-8 h-8 text-white" />
-          </div>
-          
-          <h2 className="text-2xl font-bold text-slate-800 mb-3">
-            Welcome Back!
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-brand-50/30 flex flex-col justify-center p-6">
+      <div className="feature-card max-w-md w-full mx-auto p-6">
+        <div className="text-center mb-6">
+          <h2 className="text-2xl font-bold text-slate-800">
+            {mode === "login" ? "Partner Login" : "Partner Sign Up"}
           </h2>
-          <p className="text-slate-600 leading-relaxed">
-            Sign in to your partner account
+          <p className="text-sm text-slate-600">
+            {mode === "login" ? "Sign in with your phone number" : "Create your partner account"}
           </p>
         </div>
 
-        {/* Login Form */}
-        <div className="feature-card p-6 mb-6">
-          <form onSubmit={handleSendOTP} className="space-y-6">
-            {/* Phone Input */}
+        {step === "phone" ? (
+          <form onSubmit={handleSendOTP} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label htmlFor="login-phone" className="block text-sm font-medium text-slate-700 mb-2">
                 📱 Mobile Number
               </label>
               <div className="relative">
@@ -98,77 +165,83 @@ export default function LoginPage() {
                   <span className="text-slate-500 text-sm font-medium">+91</span>
                 </div>
                 <input
+                  id="login-phone"
                   type="tel"
                   value={phone}
-                  onChange={(e) => handlePhoneChange(e.target.value)}
+                  onChange={e => setPhone(e.target.value.replace(/\D/g, "").slice(0,10))}
                   className="w-full pl-16 pr-4 py-4 border-2 border-slate-200 rounded-xl focus:border-brand-500 focus:outline-none text-center text-lg font-semibold tracking-wider transition-colors"
-                  placeholder="000 000 0000"
-                  maxLength="12"
+                  placeholder="0000000000"
+                  maxLength={10}
                   autoComplete="tel"
+                  disabled={isLoading}
                 />
               </div>
-              <p className="text-xs text-slate-500 mt-1">
-                We'll send you a verification code
-              </p>
             </div>
 
-            {/* Error Message */}
-            {error && (
-              <div className="flex items-center space-x-2 text-error-600 bg-error-50 p-3 rounded-lg">
-                <AlertCircle className="w-4 h-4" />
-                <span className="text-sm">{error}</span>
-              </div>
-            )}
-
-            {/* Send OTP Button */}
             <button
               type="submit"
-              disabled={isLoading || phone.replace(/\s/g, "").length !== 10}
-              className="partner-button-primary w-full py-4 text-base font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isLoading || !validatePhone()}
+              className="partner-button-primary w-full py-4 text-base font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
               {isLoading ? (
-                <div className="flex items-center justify-center space-x-2">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Sending OTP...</span>
-                </div>
+                <><Loader2 className="w-5 h-5 animate-spin mr-2"/> Sending OTP...</>
               ) : (
-                <div className="flex items-center justify-center space-x-2">
-                  <Phone className="w-5 h-5" />
-                  <span>Send OTP</span>
-                </div>
+                <><Phone className="w-5 h-5 mr-2"/> {mode === "login" ? "Send OTP" : "Create Account"}</>
               )}
             </button>
+
+            {error && <div className="mt-2 text-error-600 text-sm">{error}</div>}
+            {success && <div className="mt-2 text-green-600 text-sm">{success}</div>}
+            
+            {/* Mode Toggle */}
+            <div className="text-center pt-4 border-t border-slate-200">
+              <p className="text-sm text-slate-600 mb-2">
+                {mode === "login" ? "New to our platform?" : "Already have an account?"}
+              </p>
+              <button
+                type="button"
+                onClick={toggleMode}
+                className="text-brand-600 hover:text-brand-700 font-medium text-sm underline"
+                disabled={isLoading}
+              >
+                {mode === "login" ? "Sign up as Partner" : "Login instead"}
+              </button>
+            </div>
           </form>
-        </div>
-
-        {/* Sign Up Link */}
-        <div className="text-center">
-          <p className="text-sm text-slate-600">
-            Don't have an account?{" "}
-            <Link href="/" className="text-brand-600 font-semibold hover:underline">
-              Sign Up
-            </Link>
-          </p>
-        </div>
-
-        {/* Demo Credentials */}
-        <div className="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
-          <p className="text-sm font-medium text-blue-800 mb-2">🧪 Demo Login:</p>
-          <div className="space-y-1 text-xs text-blue-700">
-            <p>Phone: <span className="font-mono">987 654 3210</span></p>
-            <p>OTP: <span className="font-mono">Any 6-digit code works</span></p>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <button onClick={handleBack} className="text-slate-600 hover:text-slate-800 flex items-center gap-1 text-sm" disabled={isVerifying}>
+                <ArrowLeft className="w-4 h-4"/> Change Number
+              </button>
+              <button
+                onClick={handleSendOTP}
+                className="text-sm text-brand-700 hover:underline"
+                disabled={isLoading || isVerifying}
+              >
+                Resend OTP
+              </button>
+            </div>
+            <OTPInput
+              length={6}
+              onComplete={code => { if (code.length === 6) handleVerifyOTP(code) }}
+              disabled={isVerifying}
+            />
+            <button
+              onClick={() => handleVerifyOTP(document.querySelector('[data-otp-input]')?.value || "")}
+              disabled={isVerifying}
+              className="partner-button-primary w-full py-3 font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            >
+              {isVerifying ? (
+                <><Loader2 className="w-5 h-5 animate-spin mr-2"/> Verifying...</>
+              ) : (
+                mode === "login" ? 'Verify & Login' : 'Verify & Create Account'
+              )}
+            </button>
+            {error && <div className="mt-1 text-error-600 text-sm">{error}</div>}
+            {success && <div className="mt-1 text-green-600 text-sm">{success}</div>}
           </div>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="text-center pt-8">
-        <p className="text-xs text-slate-500">
-          Having trouble?{" "}
-          <Link href="/support" className="text-brand-600 underline">
-            Contact Support
-          </Link>
-        </p>
+        )}
       </div>
     </div>
   )

@@ -2,46 +2,44 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Bell, Star, TrendingUp, Clock, IndianRupee, Package, CreditCard, X, Zap, Crown } from "lucide-react"
+import { Bell, Star, Clock, IndianRupee, Package, X, Crown, MapPin } from "lucide-react"
 import OnlineToggle from "../../components/OnlineToggle"
 import BottomNav from "../../components/BottomNav"
 import { getGreeting, formatCurrency } from "../../lib/utils"
-import { useNotification } from "../services/notificationService"
-import { routeBasedOrders } from "../data/dummyOrders"
+import { isSubscriptionActive } from "../../lib/subscription"
 import { useOrder } from "../contexts/OrderContext"
 import { useRouter } from "next/navigation"
+import { apiClient, API_BASE_URL } from "../../lib/api/apiClient"
 
 export default function Dashboard() {
   const router = useRouter()
-  const { currentOrder, acceptOrder, ORDER_STATUSES } = useOrder()
-  const { triggerOrderAlert, resetAudioContext } = useNotification()
+  const { currentOrder, ORDER_STATUSES } = useOrder()
   
   const [partnerData, setPartnerData] = useState({
-    name: "Rajesh Kumar",
-    rating: 4.8,
-    totalDeliveries: 156,
-    todayEarnings: 850,
-    weeklyEarnings: 4200,
-    pendingDues: 250,
+    name: "—",
+    rating: 0,
+    totalDeliveries: 0,
+    todayEarnings: 0,
+    weeklyEarnings: 0,
+    pendingDues: 0,
     isOnline: false,
-    activeHours: "6h 30m"
+    activeHours: "0h 0m"
   })
 
   const [todayStats, setTodayStats] = useState({
-    deliveries: 8,
-    earnings: 850,
-    rating: 4.9,
-    hours: "6h 30m"
+    deliveries: 0,
+    earnings: 0,
+    rating: 0,
+    hours: "0h 0m"
   })
 
   // Order receiving states
-  const [currentOrderPopup, setCurrentOrderPopup] = useState(null)
-  const [simulationActive, setSimulationActive] = useState(false)
   const [remainingTime, setRemainingTime] = useState(30)
   
   // Subscription popup state
   const [showSubscriptionPopup, setShowSubscriptionPopup] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState('')
+  const [geoPerm, setGeoPerm] = useState('prompt')
 
   // Redirect if there's already an active order
   useEffect(() => {
@@ -66,96 +64,12 @@ export default function Dashboard() {
   }, [currentOrder, router, ORDER_STATUSES])
 
   // Simulate incoming orders when online
-  useEffect(() => {
-    if (!partnerData.isOnline || simulationActive) return
-
-    const startSimulation = () => {
-      setSimulationActive(true)
-      
-      // Show next order after 3 seconds
-      setTimeout(() => {
-        // Get next order from array (cycle through available orders)
-        const orderIndex = Math.floor(Math.random() * routeBasedOrders.length)
-        showNewOrderPopup(routeBasedOrders[orderIndex])
-      }, 3000)
-    }
-
-    const initDelay = setTimeout(startSimulation, 1000)
-
-    return () => {
-      clearTimeout(initDelay)
-    }
-  }, [partnerData.isOnline, simulationActive])
+  // No frontend simulation of orders in production
 
   // Reset simulation when returning to dashboard (after completing an order)
-  useEffect(() => {
-    if (partnerData.isOnline && !currentOrder && !currentOrderPopup) {
-      // If we're online but have no active order or popup, reset to listen for new orders
-      setSimulationActive(false)
-    }
-  }, [currentOrder, currentOrderPopup, partnerData.isOnline])
+  useEffect(() => {}, [currentOrder, partnerData.isOnline])
 
-  const showNewOrderPopup = async (order) => {
-    if (!partnerData.isOnline) return
-
-    // Trigger notification alerts
-    await triggerOrderAlert(order)
-    
-    // Show popup
-    setCurrentOrderPopup({
-      ...order,
-      showTime: Date.now(),
-      timeoutId: setTimeout(() => {
-        handleOrderDecline()
-      }, 30000)
-    })
-  }
-
-  const handleOrderAccept = () => {
-    if (!currentOrderPopup) return
-
-    // Clear timeout
-    if (currentOrderPopup.timeoutId) {
-      clearTimeout(currentOrderPopup.timeoutId)
-    }
-
-    const acceptedOrderData = { ...currentOrderPopup }
-    delete acceptedOrderData.timeoutId
-    delete acceptedOrderData.showTime
-
-    acceptOrder(acceptedOrderData)
-    setCurrentOrderPopup(null)
-  }
-
-  const handleOrderDecline = () => {
-    if (!currentOrderPopup) return
-
-    // Clear timeout
-    if (currentOrderPopup.timeoutId) {
-      clearTimeout(currentOrderPopup.timeoutId)
-    }
-
-    setCurrentOrderPopup(null)
-  }
-
-  const calculateRemainingTime = () => {
-    if (!currentOrderPopup?.showTime) return 30
-    const elapsed = (Date.now() - currentOrderPopup.showTime) / 1000
-    return Math.max(0, 30 - Math.floor(elapsed))
-  }
-
-  useEffect(() => {
-    if (!currentOrderPopup) {
-      setRemainingTime(30)
-      return
-    }
-
-    const timer = setInterval(() => {
-      setRemainingTime(calculateRemainingTime())
-    }, 1000)
-
-    return () => clearInterval(timer)
-  }, [currentOrderPopup])
+  // No popup/simulation handlers
 
   const formatTimeAgo = (timestamp) => {
     const diff = Date.now() - new Date(timestamp).getTime()
@@ -167,13 +81,56 @@ export default function Dashboard() {
     return distance || 'N/A'
   }
 
-  const handleUserInteraction = () => {
-    resetAudioContext()
-  }
+  const handleUserInteraction = () => {}
 
-  const handleStatusChange = (isOnline) => {
+  const handleStatusChange = async (isOnline) => {
+    if (isOnline) {
+      // Check subscription from localStorage
+      let active = false
+      try {
+        const raw = window.localStorage.getItem('partnerSubscription')
+        if (raw) {
+          const sub = JSON.parse(raw)
+          active = isSubscriptionActive(sub?.expiryDate)
+        }
+      } catch {}
+      if (!active) {
+        setShowSubscriptionPopup(true)
+        return
+      }
+    }
+    // Persist to backend and localStorage
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      await fetch(`${API_BASE_URL}/drivers/me/online`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ isOnline })
+      })
+      try { localStorage.setItem('driver_is_online', JSON.stringify(!!isOnline)) } catch {}
+    } catch {}
     setPartnerData(prev => ({ ...prev, isOnline }))
   }
+
+  // Track geolocation permission state to show a soft prompt banner
+  useEffect(() => {
+    let mounted = true
+    async function checkPerm() {
+      try {
+        if (navigator.permissions && navigator.permissions.query) {
+          const p = await navigator.permissions.query({ name: 'geolocation' })
+          if (!mounted) return
+          setGeoPerm(p.state)
+          p.onchange = () => setGeoPerm(p.state)
+        }
+      } catch {}
+    }
+    checkPerm()
+    return () => { mounted = false }
+  }, [])
   
   // Subscription plans data
   const subscriptionPlans = [
@@ -203,13 +160,49 @@ export default function Dashboard() {
     }
   ]
   
-  // Show subscription popup on dashboard load
+  // Show subscription popup on dashboard load if not active
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowSubscriptionPopup(true)
-    }, 2000)
-    
-    return () => clearTimeout(timer)
+    // hydrate name and online from localStorage/backend
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('user_data') : null
+      if (raw) {
+        const u = JSON.parse(raw)
+        setPartnerData(prev => ({ ...prev, name: u?.name || prev.name }))
+      }
+    } catch {}
+    // Hydrate online from backend first; fallback to localStorage
+    (async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+        const res = await fetch(`${API_BASE_URL}/drivers/me`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+        if (res.ok) {
+          const me = await res.json()
+          const online = typeof me?.isOnline === 'boolean' ? me.isOnline : false
+          setPartnerData(prev => ({ ...prev, isOnline: online }))
+          try { localStorage.setItem('driver_is_online', JSON.stringify(!!online)) } catch {}
+        } else {
+          const raw = localStorage.getItem('driver_is_online')
+          if (raw != null) setPartnerData(prev => ({ ...prev, isOnline: JSON.parse(raw) }))
+        }
+      } catch {
+        try {
+          const raw = localStorage.getItem('driver_is_online')
+          if (raw != null) setPartnerData(prev => ({ ...prev, isOnline: JSON.parse(raw) }))
+        } catch {}
+      }
+    })()
+    let active = false
+    try {
+      const raw = window.localStorage.getItem('partnerSubscription')
+      if (raw) {
+        const sub = JSON.parse(raw)
+        active = isSubscriptionActive(sub?.expiryDate)
+      }
+    } catch {}
+    if (!active) {
+      const timer = setTimeout(() => setShowSubscriptionPopup(true), 1500)
+      return () => clearTimeout(timer)
+    }
   }, [])
   
   const handlePlanSelection = (planId) => {
@@ -239,6 +232,9 @@ export default function Dashboard() {
               <Star className="w-4 h-4 text-warning-600 fill-current" />
               <span className="text-sm font-semibold text-warning-700">{partnerData.rating}</span>
             </div>
+            <Link href="/dashboard/map" className="p-2 hover:bg-slate-100 rounded-lg transition-colors" title="Live Map">
+              <MapPin className="w-5 h-5 text-slate-700" />
+            </Link>
             <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors relative">
               <Bell className="w-5 h-5 text-slate-600" />
               <div className="absolute -top-1 -right-1 w-3 h-3 bg-error-500 rounded-full border-2 border-white"></div>
@@ -253,6 +249,19 @@ export default function Dashboard() {
           initialStatus={partnerData.isOnline}
           onStatusChange={handleStatusChange}
         />
+
+        {/* Location permission banner (only when online and not granted) */}
+        {partnerData.isOnline && geoPerm !== 'granted' && (
+          <div className="partner-card p-4 border border-blue-200 bg-blue-50">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm text-slate-700 font-medium">Enable Location</p>
+                <p className="text-xs text-slate-600">Turn on location access so we can show your live position and assign nearby orders.</p>
+              </div>
+              <Link href="/dashboard/map" className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">Enable</Link>
+            </div>
+          </div>
+        )}
 
         {/* Today's Stats */}
         <div className="grid grid-cols-2 gap-4">
@@ -281,34 +290,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Weekly Summary */}
-        <div className="earnings-card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-slate-800">This Week</h3>
-            <TrendingUp className="w-5 h-5 text-brand-600" />
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <p className="text-sm text-slate-600 mb-1">Total Earnings</p>
-              <p className="text-2xl font-bold text-brand-700">{formatCurrency(partnerData.weeklyEarnings)}</p>
-            </div>
-            <div>
-              <p className="text-sm text-slate-600 mb-1">Active Time</p>
-              <p className="text-2xl font-bold text-brand-700">{partnerData.activeHours}</p>
-            </div>
-          </div>
-          
-          <div className="bg-white/50 rounded-lg p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-600">Weekly Target: ₹5,000</span>
-              <span className="text-sm font-semibold text-brand-600">84%</span>
-            </div>
-            <div className="w-full bg-brand-200 rounded-full h-2 mt-2">
-              <div className="bg-brand-500 h-2 rounded-full" style={{ width: '84%' }}></div>
-            </div>
-          </div>
-        </div>
+        {/* Weekly Summary removed (dummy). Show only basic KPIs above. */}
 
         {/* Payment Due Alert */}
         {partnerData.pendingDues > 0 && (
@@ -368,99 +350,6 @@ export default function Dashboard() {
 
       <BottomNav />
 
-      {/* Order Popup */}
-      {currentOrderPopup && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full mx-4 transform animate-pulse-scale">
-            {/* Header with Timer */}
-            <div className="p-4 rounded-t-2xl flex justify-between items-center bg-green-500">
-              <div className="text-white">
-                <h2 className="font-bold text-lg">📦 New Order</h2>
-                <p className="text-sm opacity-90">{formatTimeAgo(currentOrderPopup.orderTime)}</p>
-              </div>
-              <div className="text-white text-right">
-                <div className={`text-2xl font-bold ${remainingTime <= 10 ? 'animate-pulse text-red-200' : ''}`}>
-                  {remainingTime}s
-                </div>
-                <p className="text-xs opacity-75">to respond</p>
-              </div>
-            </div>
-
-            {/* Order Details */}
-            <div className="p-4 space-y-4">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h3 className="font-semibold text-lg text-gray-800">{currentOrderPopup.customerName}</h3>
-                  <p className="text-gray-600 text-sm">{currentOrderPopup.id}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-green-600">₹{currentOrderPopup.partnerEarnings}</p>
-                  <p className="text-sm text-gray-500">earnings</p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-blue-500">📍</span>
-                  <div className="text-sm">
-                    <p className="font-medium text-gray-800">Pickup</p>
-                    <p className="text-gray-600">{currentOrderPopup.pickupLocation.address}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-green-500">🎯</span>
-                  <div className="text-sm">
-                    <p className="font-medium text-gray-800">Delivery</p>
-                    <p className="text-gray-600">{currentOrderPopup.customerLocation.address}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-between text-sm bg-gray-50 p-3 rounded-lg">
-                <div className="text-center">
-                  <p className="text-gray-500">Distance</p>
-                  <p className="font-semibold">{formatDistance(currentOrderPopup.distance)}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-gray-500">Time</p>
-                  <p className="font-semibold">{currentOrderPopup.estimatedTime}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-gray-500">Payment</p>
-                  <p className="font-semibold">{currentOrderPopup.paymentMethod === 'Cash on Delivery' ? 'COD' : 'Online'}</p>
-                </div>
-              </div>
-
-              <div className="bg-yellow-50 p-3 rounded-lg">
-                <p className="text-sm text-yellow-800">
-                  <span className="font-medium">Items:</span> {currentOrderPopup.parcelDetails.description}
-                </p>
-                {currentOrderPopup.deliveryInstructions && (
-                  <p className="text-sm text-yellow-700 mt-1">
-                    <span className="font-medium">Note:</span> {currentOrderPopup.deliveryInstructions}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="p-4 flex gap-3">
-              <button
-                onClick={handleOrderDecline}
-                className="flex-1 py-3 px-4 bg-gray-200 text-gray-800 rounded-xl font-semibold hover:bg-gray-300 transition-colors"
-              >
-                Decline
-              </button>
-              <button
-                onClick={handleOrderAccept}
-                className="flex-1 py-3 px-4 text-white rounded-xl font-semibold transition-colors bg-green-500 hover:bg-green-600"
-              >
-                Accept Order
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Subscription Popup */}
       {showSubscriptionPopup && (
