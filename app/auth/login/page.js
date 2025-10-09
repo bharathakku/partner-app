@@ -63,11 +63,15 @@ function LoginInner() {
         credentials: 'include'
       })
       if (!res.ok) {
-        // If we cannot fetch profile, on signup guide to KYC; on login, fallback to dashboard check
-        router.replace(mode === "signup" ? "/auth/kyc" : "/dashboard")
+        // If profile fetch fails: signup -> KYC, login -> activation pending
+        router.replace(mode === "signup" ? "/auth/kyc" : "/auth/activation-pending")
         return
       }
       const driver = await res.json()
+      if (driver && driver.exists === false) {
+        router.replace("/auth/kyc")
+        return
+      }
       // Decide path by documents and active state
       const docs = Array.isArray(driver?.documents) ? driver.documents : []
       const hasDocs = docs.length > 0
