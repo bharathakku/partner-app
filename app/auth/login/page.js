@@ -1,11 +1,20 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import OTPInput from "@/components/OTPInput"
 import { Loader2, Phone, ArrowLeft } from "lucide-react"
 
+// Wrap useSearchParams usage in a Suspense boundary to satisfy Next.js prerendering
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-slate-600">Loading...</div>}>
+      <LoginInner />
+    </Suspense>
+  )
+}
+
+function LoginInner() {
   const [phone, setPhone] = useState("")
   const [step, setStep] = useState("phone")
   const [mode, setMode] = useState("login") // "login" or "signup"
