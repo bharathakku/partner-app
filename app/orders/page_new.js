@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useOrder } from '../contexts/OrderContext';
 import { useNotification } from '../services/notificationService';
 import { routeBasedOrders } from '../data/dummyOrders';
+import { partnerService } from '../lib/api/apiClient';
 import { 
   Clock, MapPin, Phone, IndianRupee, 
   Package, Timer, AlertCircle, CheckCircle2,
@@ -120,6 +121,23 @@ export default function OrdersPage() {
     setIsOnline(true);
   }, []);
 
+  // Inform backend we're online when switching online; set offline on cleanup
+  useEffect(() => {
+    let cancelled = false;
+    async function syncOnline() {
+      try {
+        if (isOnline) {
+          await partnerService.toggleOnlineStatus();
+        }
+      } catch {}
+    }
+    syncOnline();
+    return () => {
+      (async () => { try { if (isOnline && !cancelled) await partnerService.toggleOnlineStatus(); } catch {} })();
+      cancelled = true;
+    };
+  }, [isOnline]);
+
   // Simulate incoming orders when online
   useEffect(() => {
     if (!isOnline || simulationActive || hasReceivedOrder || activeTab !== 'live') return;
@@ -198,7 +216,7 @@ export default function OrdersPage() {
     setCurrentOrderPopup(null);
   };
 
-  const handleOrderDecline = () => {
+  const handleOrderDecline = useCallback(() => {
     if (!currentOrderPopup) return;
 
     // Clear timeout
@@ -207,7 +225,7 @@ export default function OrdersPage() {
     }
 
     setCurrentOrderPopup(null);
-  };
+  }, [currentOrderPopup]);
 
   const formatTimeAgo = (timestamp) => {
     const diff = Date.now() - new Date(timestamp).getTime();

@@ -56,7 +56,7 @@ const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
     // Connect socket
     const sock = connectSocket();
 
-    if (!isOnline || !driverId) return;
+    if (!driverId) return;
 
     // Join driver room to receive assignments
     joinDriverRoom(driverId);
@@ -113,7 +113,7 @@ const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
       try { leaveDriverRoom(driverId); } catch {}
       try { clearTimeout(timer); } catch {}
     };
-  }, [isOnline, driverId, currentOrderPopup, showNewOrderPopup]);
+  }, [driverId, currentOrderPopup, showNewOrderPopup]);
 
   const handleOrderAccept = useCallback(async () => {
     if (!currentOrderPopup) return;
