@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOrder } from '../contexts/OrderContext';
+import { earningsService } from '../../lib/api/apiClient';
 import { 
   IndianRupee, TrendingUp, Calendar, Clock,
   Download, ArrowUpRight, Banknote, CreditCard,
@@ -26,6 +27,32 @@ export default function EarningsPage() {
   const [transferring, setTransferring] = useState(false);
   const [transferSuccess, setTransferSuccess] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState('today');
+  const [apiStats, setApiStats] = useState(null);
+  const [loadingStats, setLoadingStats] = useState(false);
+  const [statsError, setStatsError] = useState('');
+
+  // Load real stats from API; fallback to context-derived
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      setLoadingStats(true); setStatsError('');
+      try {
+        const res = await earningsService.getDashboardStats();
+        if (!mounted) return;
+        const data = res?.data || res;
+        setApiStats(data);
+      } catch (e) {
+        if (!mounted) return;
+        setStatsError(e?.message || 'Failed to load earnings');
+      } finally {
+        if (mounted) setLoadingStats(false);
+      }
+    }
+    load();
+    // refresh every 60s
+    const t = setInterval(load, 60000);
+    return () => { mounted = false; clearInterval(t); };
+  }, []);
 
   const bankAccount = {
     accountName: 'Bharath S Anand',
@@ -109,7 +136,16 @@ export default function EarningsPage() {
     };
   };
 
-  const stats = getEarningsStats();
+  const stats = (() => {
+    if (apiStats && typeof apiStats === 'object') {
+      return {
+        today: { count: apiStats?.todayOrders ?? 0, earnings: apiStats?.todayEarnings ?? 0 },
+        week: { count: apiStats?.weekOrders ?? 0, earnings: apiStats?.weekEarnings ?? 0 },
+        month: { count: apiStats?.monthOrders ?? 0, earnings: apiStats?.monthEarnings ?? 0 },
+      };
+    }
+    return getEarningsStats();
+  })();
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -140,7 +176,7 @@ export default function EarningsPage() {
               <p className="text-success-100 text-sm mb-1">Available Balance</p>
               <div className="flex items-center text-3xl font-bold">
                 <IndianRupee className="w-6 h-6 mr-1" />
-                <span>{partnerBalance.toFixed(2)}</span>
+                <span>{Number(apiStats?.availableBalance ?? partnerBalance).toFixed(2)}</span>
               </div>
             </div>
             <div className="w-12 h-12 bg-success-400 rounded-full flex items-center justify-center">
@@ -167,6 +203,7 @@ export default function EarningsPage() {
       <div className="px-4 pb-4">
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <h3 className="font-semibold text-slate-800 mb-4">Earnings Overview</h3>
+          {statsError && (<div className="text-sm text-red-600 mb-2">{statsError}</div>)}
           
           {/* Period Selector */}
           <div className="flex items-center space-x-2 mb-4">
