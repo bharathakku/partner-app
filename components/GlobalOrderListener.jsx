@@ -16,10 +16,7 @@ export default function GlobalOrderListener() {
 
   // Require auth and restrict to operational pages only
   const token = useMemo(() => (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null), [])
-  const subActive = useMemo(() => {
-    try { return typeof window !== 'undefined' && localStorage.getItem('sub_active') === 'true' } catch { return false }
-  }, [pathname])
-  const shouldAttach = !!token && subActive && (pathname?.startsWith('/dashboard') || pathname?.startsWith('/orders'))
+  const shouldAttach = !!token && (pathname?.startsWith('/dashboard') || pathname?.startsWith('/orders'))
 
   // Hydrate from localStorage fast
   useEffect(() => {
@@ -48,7 +45,7 @@ export default function GlobalOrderListener() {
     }
     poll()
     return () => { try { clearTimeout(timer) } catch {} }
-  }, [shouldAttach, subActive])
+  }, [shouldAttach])
 
   // Resume audio context on any click/tap globally
   useEffect(() => {
@@ -58,5 +55,6 @@ export default function GlobalOrderListener() {
   }, [resetAudioContext])
 
   if (!shouldAttach) return null
+  try { console.log('[listener] attach:', { isOnline }) } catch {}
   return (<OrderReceiving isOnline={isOnline} />)
 }
