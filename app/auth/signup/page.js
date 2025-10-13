@@ -3,11 +3,12 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Mail, Lock, User, Loader2, RefreshCw, ArrowLeft } from "lucide-react"
+import { Mail, Lock, User, Loader2, RefreshCw, ArrowLeft, Phone } from "lucide-react"
 
 export default function PartnerSignupPage() {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
+  const [phone, setPhone] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
@@ -45,6 +46,11 @@ export default function PartnerSignupPage() {
       setError("Please enter your full name")
       return
     }
+    const digits = (phone || '').replace(/\D/g, '')
+    if (!/^\d{10}$/.test(digits)) {
+      setError("Please enter a valid 10-digit mobile number")
+      return
+    }
     if (parseInt(captchaAnswer, 10) !== (captchaA + captchaB)) {
       setError("Captcha is incorrect")
       return
@@ -55,7 +61,7 @@ export default function PartnerSignupPage() {
       const res = await fetch(`${API_BASE}/auth/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, role: "driver" })
+        body: JSON.stringify({ name, email, phone: `+91${digits}`, password, role: "driver" })
       })
       const data = await res.json()
       if (!res.ok || !data.token) throw new Error(data.error || "Signup failed")

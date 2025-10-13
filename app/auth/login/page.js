@@ -91,10 +91,13 @@ function LoginInner() {
     }
     setIsLoading(true)
     try {
+      const digits = (email || '').replace(/\D/g, '')
+      const isPhone = /^\d{10}$/.test(digits)
+      const payload = isPhone ? { phone: `+91${digits}`, password } : { email, password }
       const res = await fetch(`${API_BASE}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify(payload)
       })
       const data = await res.json()
       if (!res.ok || !data.token) throw new Error(data.error || "Invalid credentials")
@@ -121,15 +124,15 @@ function LoginInner() {
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Email</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">Email or Phone</label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <input
-                type="email"
+                type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full pl-10 pr-3 py-3 border-2 border-slate-200 rounded-xl focus:border-brand-500 focus:outline-none"
-                placeholder="you@example.com"
+                placeholder="you@example.com or 10-digit phone"
                 required
               />
             </div>
