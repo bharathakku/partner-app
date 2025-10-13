@@ -16,6 +16,7 @@ export default function VerifyOTP() {
   const [authMode, setAuthMode] = useState("login")
   const [countryCode, setCountryCode] = useState("91")
   const [usingDevCode, setUsingDevCode] = useState(false)
+  const [devCode, setDevCode] = useState("")
   const inputRefs = useRef([])
   const router = useRouter()
   // Normalize API base: prefer env, else current origin. Always include '/api'
@@ -90,11 +91,13 @@ export default function VerifyOTP() {
     setAuthMode(storedAuthMode)
     setCountryCode(storedCc)
     setOtpToken(storedToken)
-
-    // If backend provided a devCode (SMS not sent), auto-verify for faster testing
+    // If backend provided a devCode (on-screen code), show it instead of auto-verifying
     if (storedDevCode && storedDevCode.length === 6) {
       setUsingDevCode(true)
-      setTimeout(() => handleVerify(String(storedDevCode)), 200)
+      setDevCode(String(storedDevCode))
+    } else {
+      setUsingDevCode(false)
+      setDevCode("")
     }
 
     // Start countdown timer
@@ -110,7 +113,7 @@ export default function VerifyOTP() {
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [router, handleVerify])
+  }, [router])
 
   const handleInputChange = (index, value) => {
     if (value.length > 1) return
@@ -126,10 +129,7 @@ export default function VerifyOTP() {
       inputRefs.current[index + 1]?.focus()
     }
 
-    // Auto-submit when all fields are filled
-    if (value && newOtp.every(digit => digit)) {
-      handleVerify(newOtp.join(""))
-    }
+    // Do not auto-submit; let user click Verify
   }
 
   const handleKeyDown = (index, e) => {
@@ -161,9 +161,11 @@ export default function VerifyOTP() {
       if (data.devCode) {
         localStorage.setItem("partner_dev_code", String(data.devCode))
         setUsingDevCode(true)
+        setDevCode(String(data.devCode))
       } else {
         localStorage.removeItem("partner_dev_code")
         setUsingDevCode(false)
+        setDevCode("")
       }
 
       // Reset timer and inputs
@@ -221,8 +223,11 @@ export default function VerifyOTP() {
           <p className="text-brand-600 font-semibold text-lg">
             +{countryCode} {formatPhoneNumber(phone)}
           </p>
-          {usingDevCode && (
-            <p className="mt-2 text-xs text-slate-500">Using development code from server for testing</p>
+          {usingDevCode && devCode && (
+            <div className="mx-auto mt-3 w-full max-w-xs rounded-xl border-2 border-dashed border-brand-300 bg-brand-50 p-3">
+              <p className="text-xs text-slate-600">Your verification code</p>
+              <p className="mt-1 text-2xl font-extrabold tracking-widest text-brand-700">{devCode}</p>
+            </div>
           )}
         </div>
 
