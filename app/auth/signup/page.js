@@ -128,6 +128,23 @@ export default function PartnerSignupPage() {
             </div>
 
             <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Phone Number</label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0,10))}
+                  className="w-full pl-10 pr-3 py-3 border-2 border-slate-200 rounded-xl focus:border-brand-500 focus:outline-none"
+                  placeholder="10-digit mobile number"
+                  required
+                />
+              </div>
+              <p className="text-xs text-slate-500 mt-1">India numbers only (auto +91)</p>
+            </div>
+
+            <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
