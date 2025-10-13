@@ -1,11 +1,19 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { API_BASE_URL } from "../../../lib/api/apiClient"
 
 export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-slate-600">Loading...</div>}>
+      <ResetPasswordInner />
+    </Suspense>
+  )
+}
+
+function ResetPasswordInner() {
   const router = useRouter()
   const params = useSearchParams()
   const [token, setToken] = useState("")
