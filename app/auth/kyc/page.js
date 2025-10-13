@@ -191,7 +191,7 @@ export default function KYCVerification() {
           const form = new FormData()
           form.append('document', file)
           form.append('type', type)
-          const res = await fetch(`${API_BASE_URL}/partner/documents`, {
+          const res = await fetch(`${API_BASE_URL}/drivers/partner/documents`, {
             method: 'POST',
             headers: token ? { Authorization: `Bearer ${token}` } : {},
             body: form,
