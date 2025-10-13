@@ -194,8 +194,11 @@ function LoginInner() {
           {error && <div className="mt-2 text-error-600 text-sm">{error}</div>}
           {success && <div className="mt-2 text-green-600 text-sm">{success}</div>}
 
-          <div className="text-center pt-4 border-t border-slate-200 text-sm text-slate-600">
-            New to our platform? <Link href="/auth/signup" className="text-brand-600 font-semibold hover:underline">Sign up as Partner</Link>
+          <div className="flex items-center justify-between pt-4 border-t border-slate-200 text-sm text-slate-600">
+            <Link href="/auth/forgot-password" className="text-brand-600 font-semibold hover:underline">Forgot password?</Link>
+            <span>
+              New to our platform? <Link href="/auth/signup" className="text-brand-600 font-semibold hover:underline">Sign up as Partner</Link>
+            </span>
           </div>
         </form>
       </div>
