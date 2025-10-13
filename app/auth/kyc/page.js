@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { ArrowLeft, User, FileText, Camera, Upload, Loader2, AlertCircle, CheckCircle, Car, IndianRupee, Package, Shirt } from "lucide-react"
 import Link from "next/link"
 import { formatCurrency } from "../../../lib/utils"
+import { API_BASE_URL } from "../../../lib/api/apiClient"
 import { 
   VEHICLE_TYPES, 
   getVehicleTypesArray, 
@@ -155,26 +156,94 @@ export default function KYCVerification() {
       if (documents.vehiclePicture) fd.append('vehiclePicture', documents.vehiclePicture)
 
       const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      // Normalize API base so it includes '/api' exactly once
-      const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4001'
-      const API_BASE = RAW_API_BASE.endsWith('/api') ? RAW_API_BASE : `${RAW_API_BASE.replace(/\/$/, '')}/api`
-      const res = await fetch(`${API_BASE}/drivers/me/kyc/upload`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: fd,
-        credentials: 'include'
-      })
-      if (!res.ok) {
-        let msg = 'Upload failed'
-        try { const j = await res.json(); msg = j.error || msg } catch {}
-        throw new Error(msg)
+
+      const tryPrimary = async () => {
+        const res = await fetch(`${API_BASE_URL}/drivers/me/kyc/upload`, {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: fd,
+          credentials: 'include'
+        })
+        if (!res.ok) {
+          const status = res.status
+          const text = await res.text().catch(() => '')
+          const message = (() => {
+            try { const j = JSON.parse(text); return j.error || j.message } catch { return text }
+          })() || `Upload failed (HTTP ${status})`
+          const err = new Error(message)
+          err.status = status
+          throw err
+        }
+        return res
+      }
+
+      const tryFallback = async () => {
+        // Fallback: upload each document via partner documents API
+        const entries = [
+          ['aadhar', documents.aadhar],
+          ['pan', documents.pan],
+          ['drivingLicense', documents.drivingLicense],
+          ['vehicleRC', documents.vehicleRC],
+          ['vehiclePicture', documents.vehiclePicture],
+        ]
+        for (const [type, file] of entries) {
+          if (!file) continue
+          const form = new FormData()
+          form.append('document', file)
+          form.append('type', type)
+          const res = await fetch(`${API_BASE_URL}/partner/documents`, {
+            method: 'POST',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            body: form,
+            credentials: 'include'
+          })
+          if (!res.ok) {
+            const status = res.status
+            const text = await res.text().catch(() => '')
+            const message = (() => { try { const j = JSON.parse(text); return j.error || j.message } catch { return text } })() || `Document upload failed (${type})`
+            const err = new Error(message)
+            err.status = status
+            throw err
+          }
+        }
+        // Optionally persist KYC metadata via drivers update if available; ignore failures
+        try {
+          await fetch(`${API_BASE_URL}/drivers/me`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+              fullName: formData.fullName,
+              email: formData.email,
+              aadharNumber: (formData.aadharNumber || '').replace(/\s/g, ''),
+              panNumber: (formData.panNumber || '').toUpperCase(),
+              drivingLicense: (formData.drivingLicense || '').toUpperCase(),
+              vehicleNumber: (formData.vehicleNumber || '').replace(/\s/g, '').toUpperCase(),
+              vehicleType: formData.vehicleType,
+            })
+          })
+        } catch {}
+      }
+
+      try {
+        await tryPrimary()
+      } catch (e) {
+        if (e?.status === 404 || e?.status === 405) {
+          await tryFallback()
+        } else {
+          throw e
+        }
       }
 
       // Simulate quick processing for free registration meta
       await new Promise(resolve => setTimeout(resolve, 500))
       router.push("/auth/activation-pending")
     } catch (err) {
-      setErrors({ submit: "Failed to complete registration. Please try again." })
+      const msg = err?.message || 'Failed to complete registration. Please try again.'
+      setErrors({ submit: msg })
     } finally {
       setIsLoading(false)
     }
