@@ -47,7 +47,7 @@ function LoginInner() {
         credentials: 'include'
       })
       if (!res.ok) {
-        // If profile fetch fails, send to activation pending for login flow
+        // If profile fetch fails, send to activation pending (wait for admin)
         router.replace("/auth/activation-pending")
         return
       }
@@ -71,8 +71,10 @@ function LoginInner() {
       try { localStorage.setItem('driver_profile', JSON.stringify(driver)) } catch {}
       // Profile exists -> go to main dashboard
       router.replace("/dashboard")
-    } catch {
-      router.replace("/dashboard")
+    } catch (e) {
+      // On any error, do NOT send to dashboard. Stay pending and show error.
+      console.error('routeAfterAuth failed:', e)
+      router.replace("/auth/activation-pending")
     }
   }
   const regenCaptcha = () => {
@@ -100,7 +102,10 @@ function LoginInner() {
         body: JSON.stringify(payload)
       })
       const data = await res.json()
-      if (!res.ok || !data.token) throw new Error(data.error || "Invalid credentials")
+      if (!res.ok || !data.token) {
+        const msg = data?.error || (res.status === 401 ? 'Invalid email/phone or password' : 'Login failed')
+        throw new Error(msg)
+      }
       localStorage.setItem("auth_token", data.token)
       localStorage.setItem("user_data", JSON.stringify(data.user))
       setSuccess("Login successful!")
