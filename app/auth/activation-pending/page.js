@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Clock, CheckCircle, Phone, MessageCircle, RefreshCw, AlertCircle } from "lucide-react"
 import { getVehicleTypeById } from "../../../lib/registration"
+import { API_BASE_URL } from "../../../lib/api/apiClient"
 
 export default function ActivationPending() {
   const [timeRemaining, setTimeRemaining] = useState("")
@@ -45,6 +46,28 @@ export default function ActivationPending() {
     }
 
     updateTimer()
+
+    // Initial status check on mount: if approved, go to dashboard
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+    const checkNow = async () => {
+      if (!token) return
+      try {
+        const res = await fetch(`${API_BASE_URL}/drivers/me`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          credentials: 'include'
+        })
+        if (res.ok) {
+          const data = await res.json()
+          // Driver route returns either driver doc or { exists:false }
+          const isActive = !!data?.isActive
+          if (isActive) {
+            setActivationStatus('ready')
+            router.replace('/dashboard')
+          }
+        }
+      } catch {}
+    }
+    checkNow()
     const timer = setInterval(updateTimer, 60000) // Update every minute
 
     return () => clearInterval(timer)
@@ -54,17 +77,25 @@ export default function ActivationPending() {
     setIsRefreshing(true)
     
     try {
-      // Simulate API call to check activation status
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      // 20% chance of being activated
-      const isActivated = Math.random() < 0.2
-      
-      if (isActivated) {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      if (!token) {
+        setActivationStatus("pending")
+        return
+      }
+      const res = await fetch(`${API_BASE_URL}/drivers/me`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: 'include'
+      })
+      if (!res.ok) {
+        setActivationStatus("pending")
+        return
+      }
+      const data = await res.json()
+      const isActive = !!data?.isActive
+      if (isActive) {
         localStorage.setItem("partner_authenticated", "true")
         router.push("/dashboard")
       } else {
-        // Show that it's still pending
         setActivationStatus("pending")
       }
     } catch (err) {
