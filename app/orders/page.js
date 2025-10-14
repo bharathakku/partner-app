@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import BottomNav from '../../components/BottomNav';
 import HelpSupportModal from '../../components/HelpSupportModal';
-import { isSubscriptionActive } from '../../lib/subscription';
+import { isSubscriptionActive, getStoredSubscriptionForUser } from '../../lib/subscription';
 
 export default function OrdersPage() {
   const router = useRouter();
@@ -59,13 +59,11 @@ export default function OrdersPage() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      const raw = window.localStorage.getItem('partnerSubscription');
-      if (raw) {
-        const sub = JSON.parse(raw);
-        setIsSubscribed(isSubscriptionActive(sub?.expiryDate));
-      } else {
-        setIsSubscribed(false);
-      }
+      const rawUser = window.localStorage.getItem('user_data');
+      const u = rawUser ? JSON.parse(rawUser) : null;
+      const uid = u?._id || u?.id || null;
+      const sub = getStoredSubscriptionForUser(uid);
+      setIsSubscribed(isSubscriptionActive(sub?.expiryDate));
     } catch {
       setIsSubscribed(false);
     }

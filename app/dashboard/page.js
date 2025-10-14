@@ -6,7 +6,7 @@ import { Bell, Star, Clock, IndianRupee, Package, X, Crown, MapPin } from "lucid
 import OnlineToggle from "../../components/OnlineToggle"
 import BottomNav from "../../components/BottomNav"
 import { getGreeting, formatCurrency } from "../../lib/utils"
-import { isSubscriptionActive } from "../../lib/subscription"
+import { isSubscriptionActive, getStoredSubscriptionForUser } from "../../lib/subscription"
 import { useOrder } from "../contexts/OrderContext"
 import { useRouter } from "next/navigation"
 import { apiClient, API_BASE_URL } from "../../lib/api/apiClient"
@@ -102,16 +102,23 @@ export default function Dashboard() {
 
   const handleUserInteraction = () => {}
 
+  const getCurrentUserId = () => {
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('user_data') : null
+      if (!raw) return null
+      const u = JSON.parse(raw)
+      return u?._id || u?.id || null
+    } catch { return null }
+  }
+
   const handleStatusChange = async (isOnline) => {
     if (isOnline) {
       // Check subscription from localStorage
       let active = false
       try {
-        const raw = window.localStorage.getItem('partnerSubscription')
-        if (raw) {
-          const sub = JSON.parse(raw)
-          active = isSubscriptionActive(sub?.expiryDate)
-        }
+        const uid = getCurrentUserId()
+        const sub = getStoredSubscriptionForUser(uid)
+        active = isSubscriptionActive(sub?.expiryDate)
       } catch {}
       if (!active) {
         setShowSubscriptionPopup(true)
@@ -212,11 +219,9 @@ export default function Dashboard() {
     })()
     let active = false
     try {
-      const raw = window.localStorage.getItem('partnerSubscription')
-      if (raw) {
-        const sub = JSON.parse(raw)
-        active = isSubscriptionActive(sub?.expiryDate)
-      }
+      const uid = getCurrentUserId()
+      const sub = getStoredSubscriptionForUser(uid)
+      active = isSubscriptionActive(sub?.expiryDate)
     } catch {}
     if (!active) {
       const timer = setTimeout(() => setShowSubscriptionPopup(true), 1500)

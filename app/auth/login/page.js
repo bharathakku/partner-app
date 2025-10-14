@@ -5,6 +5,7 @@ import { useState, useEffect, Suspense } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Loader2, Mail, Lock, ArrowLeft, RefreshCw } from "lucide-react"
+import { clearStoredSubscription, clearStoredSubscriptionForUser } from "../../../lib/subscription"
 
 // Wrap useSearchParams usage in a Suspense boundary to satisfy Next.js prerendering
 export default function LoginPage() {
@@ -108,6 +109,14 @@ function LoginInner() {
       }
       localStorage.setItem("auth_token", data.token)
       localStorage.setItem("user_data", JSON.stringify(data.user))
+      // Clear any legacy/global subscription cache and user-scoped cache to avoid cross-user leakage
+      try {
+        clearStoredSubscription()
+      } catch {}
+      try {
+        const uid = data?.user?._id || data?.user?.id
+        if (uid) clearStoredSubscriptionForUser(uid)
+      } catch {}
       setSuccess("Login successful!")
       await routeAfterAuth(data.token)
     } catch (err) {
