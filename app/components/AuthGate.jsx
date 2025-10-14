@@ -42,11 +42,12 @@ export default function AuthGate({ children }) {
                 const me = await res.json()
                 const docs = Array.isArray(me?.documents) ? me.documents : []
                 const hasDocs = docs.length > 0
+                const docsApproved = hasDocs && docs.every(d => (d?.status || '').toLowerCase() === 'approved')
                 const isActive = !!me?.isActive
                 // If they are on auth pages and already active, go dashboard
-                if (pathname?.startsWith('/auth') && isActive) { if (!cancelled) router.replace('/dashboard') }
+                if (pathname?.startsWith('/auth') && isActive && docsApproved) { if (!cancelled) router.replace('/dashboard') }
                 // If docs uploaded but not active, always go pending
-                else if (hasDocs && !isActive && !pathname?.startsWith('/auth/activation-pending')) { if (!cancelled) router.replace('/auth/activation-pending') }
+                else if (hasDocs && (!isActive || !docsApproved) && !pathname?.startsWith('/auth/activation-pending')) { if (!cancelled) router.replace('/auth/activation-pending') }
                 // If no docs yet and visiting non-KYC page, go to KYC
                 else if (!hasDocs && !pathname?.startsWith('/auth/kyc') && pathname !== '/auth/signup') { if (!cancelled) router.replace('/auth/kyc') }
               }
@@ -62,9 +63,10 @@ export default function AuthGate({ children }) {
         const me = await res.json()
         const docs = Array.isArray(me?.documents) ? me.documents : []
         const hasDocs = docs.length > 0
+        const docsApproved = hasDocs && docs.every(d => (d?.status || '').toLowerCase() === 'approved')
         const isActive = !!me?.isActive
         if (!hasDocs) { if (!cancelled) { router.replace('/auth/kyc'); setChecked(true) } return }
-        if (!isActive) { if (!cancelled) { router.replace('/auth/activation-pending'); setChecked(true) } return }
+        if (!isActive || !docsApproved) { if (!cancelled) { router.replace('/auth/activation-pending'); setChecked(true) } return }
         if (!cancelled) setChecked(true)
       } catch {
         if (!cancelled) { router.replace('/auth/activation-pending'); setChecked(true) }
