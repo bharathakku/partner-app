@@ -23,6 +23,7 @@ export const viewport = {
 import { OrderProvider } from './contexts/OrderContext';
 import { ProfileProvider } from './contexts/ProfileContext';
 import GlobalOrderListener from '../components/GlobalOrderListener.jsx';
+import AuthGate from './components/AuthGate.jsx';
 
 export default function RootLayout({ children }) {
   return (
@@ -37,7 +38,9 @@ export default function RootLayout({ children }) {
       <body className={`${inter.className} antialiased`}>
         <OrderProvider>
           <ProfileProvider>
-            {children}
+            <AuthGate>
+              {children}
+            </AuthGate>
             {/* Global, cross-page order listener & popup */}
             <GlobalOrderListener />
           </ProfileProvider>
