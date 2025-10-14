@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { API_BASE_URL } from "../../lib/api/apiClient"
 
@@ -23,6 +23,7 @@ const PROTECTED_PREFIXES = [
 export default function AuthGate({ children }) {
   const router = useRouter()
   const pathname = usePathname()
+  const [checked, setChecked] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -45,20 +46,22 @@ export default function AuthGate({ children }) {
             if (isActive) { if (!cancelled) router.replace('/dashboard') }
             else if (hasDocs && pathname?.startsWith('/auth/kyc')) { if (!cancelled) router.replace('/auth/activation-pending') }
           }
+          if (!cancelled) setChecked(true)
           return
         }
         // Protected: require token
-        if (!token) { if (!cancelled) router.replace('/auth/login'); return }
+        if (!token) { if (!cancelled) { router.replace('/auth/login'); setChecked(true) } return }
         const res = await fetch(`${API_BASE_URL}/drivers/me`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-        if (!res.ok) { if (!cancelled) router.replace('/auth/activation-pending'); return }
+        if (!res.ok) { if (!cancelled) { router.replace('/auth/activation-pending'); setChecked(true) } return }
         const me = await res.json()
         const docs = Array.isArray(me?.documents) ? me.documents : []
         const hasDocs = docs.length > 0
         const isActive = !!me?.isActive
-        if (!hasDocs) { if (!cancelled) router.replace('/auth/kyc'); return }
-        if (!isActive) { if (!cancelled) router.replace('/auth/activation-pending'); return }
+        if (!hasDocs) { if (!cancelled) { router.replace('/auth/kyc'); setChecked(true) } return }
+        if (!isActive) { if (!cancelled) { router.replace('/auth/activation-pending'); setChecked(true) } return }
+        if (!cancelled) setChecked(true)
       } catch {
-        if (!cancelled) router.replace('/auth/activation-pending')
+        if (!cancelled) { router.replace('/auth/activation-pending'); setChecked(true) }
       }
     }
 
@@ -66,5 +69,8 @@ export default function AuthGate({ children }) {
     return () => { cancelled = true }
   }, [pathname, router])
 
+  if (!checked) {
+    return <div className="min-h-screen flex items-center justify-center text-slate-600">Loading...</div>
+  }
   return children
 }
