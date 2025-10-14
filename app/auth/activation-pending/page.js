@@ -47,6 +47,22 @@ export default function ActivationPending() {
 
     updateTimer()
 
+    // Helper: show local browser notification when approved
+    const notifyApproved = () => {
+      try {
+        if (typeof window === 'undefined' || !('Notification' in window)) return
+        const title = 'Account Approved'
+        const body = 'Your partner account is now active. Redirecting to dashboard.'
+        const show = () => {
+          try { new Notification(title, { body }) } catch {}
+        }
+        if (Notification.permission === 'granted') show()
+        else if (Notification.permission !== 'denied') {
+          Notification.requestPermission().then(p => { if (p === 'granted') show() })
+        }
+      } catch {}
+    }
+
     // Initial status check on mount: if approved, go to dashboard
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
     const checkNow = async () => {
@@ -62,6 +78,7 @@ export default function ActivationPending() {
           const isActive = !!data?.isActive
           if (isActive) {
             setActivationStatus('ready')
+            notifyApproved()
             router.replace('/dashboard')
           }
         }
@@ -69,8 +86,13 @@ export default function ActivationPending() {
     }
     checkNow()
     const timer = setInterval(updateTimer, 60000) // Update every minute
+    // Poll backend for approval every 30s
+    const poll = setInterval(checkNow, 30000)
 
-    return () => clearInterval(timer)
+    return () => {
+      clearInterval(timer)
+      clearInterval(poll)
+    }
   }, [])
 
   const handleRefreshStatus = async () => {

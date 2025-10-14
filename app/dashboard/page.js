@@ -63,6 +63,25 @@ export default function Dashboard() {
     }
   }, [currentOrder, router, ORDER_STATUSES])
 
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+        if (!token) { router.replace('/auth/login'); return }
+        const res = await fetch(`${API_BASE_URL}/drivers/me`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+        if (!res.ok) { router.replace('/auth/activation-pending'); return }
+        const me = await res.json()
+        const docs = Array.isArray(me?.documents) ? me.documents : []
+        const hasDocs = docs.length > 0
+        const isActive = !!me?.isActive
+        if (!hasDocs) { router.replace('/auth/kyc'); return }
+        if (!isActive) { router.replace('/auth/activation-pending'); return }
+      } catch {
+        router.replace('/auth/activation-pending')
+      }
+    })()
+  }, [router])
+
   // Simulate incoming orders when online
   // No frontend simulation of orders in production
 
