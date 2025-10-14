@@ -32,12 +32,12 @@ export default function GlobalOrderListener() {
     async function poll() {
       try {
         const t = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-        if (!shouldAttach || !t) { setIsOnline(false); return }
+        if (!shouldAttach || !t) { return }
         const res = await fetch(`${API_BASE_URL}/drivers/me`, { headers: { Authorization: `Bearer ${t}` } })
         if (res.ok) {
           const me = await res.json()
           const online = !!me?.isOnline
-          setIsOnline(subActive ? online : false)
+          setIsOnline(online)
           try { localStorage.setItem('driver_is_online', JSON.stringify(online)) } catch {}
         }
       } catch {}
