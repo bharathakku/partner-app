@@ -47,23 +47,7 @@ export default function ActivationPending() {
 
     updateTimer()
 
-    // Helper: show local browser notification when approved
-    const notifyApproved = () => {
-      try {
-        if (typeof window === 'undefined' || !('Notification' in window)) return
-        const title = 'Account Approved'
-        const body = 'Your partner account is now active. Redirecting to dashboard.'
-        const show = () => {
-          try { new Notification(title, { body }) } catch {}
-        }
-        if (Notification.permission === 'granted') show()
-        else if (Notification.permission !== 'denied') {
-          Notification.requestPermission().then(p => { if (p === 'granted') show() })
-        }
-      } catch {}
-    }
-
-    // Initial status check on mount: if approved, go to dashboard
+    // Initial status check on mount: do NOT auto-redirect; require user to tap Check Status
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
     const checkNow = async () => {
       if (!token) return
@@ -75,24 +59,17 @@ export default function ActivationPending() {
         if (res.ok) {
           const data = await res.json()
           // Driver route returns either driver doc or { exists:false }
+          const docs = Array.isArray(data?.documents) ? data.documents : []
+          const hasDocs = docs.length > 0
+          const docsApproved = hasDocs && docs.every(d => (d?.status || '').toLowerCase() === 'approved')
           const isActive = !!data?.isActive
-          if (isActive) {
-            setActivationStatus('ready')
-            notifyApproved()
-            router.replace('/dashboard')
-          }
+          if (isActive && docsApproved) { setActivationStatus('ready') }
         }
       } catch {}
     }
     checkNow()
     const timer = setInterval(updateTimer, 60000) // Update every minute
-    // Poll backend for approval every 30s
-    const poll = setInterval(checkNow, 30000)
-
-    return () => {
-      clearInterval(timer)
-      clearInterval(poll)
-    }
+    return () => { clearInterval(timer) }
   }, [])
 
   const handleRefreshStatus = async () => {
@@ -108,17 +85,16 @@ export default function ActivationPending() {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         credentials: 'include'
       })
-      if (!res.ok) {
-        setActivationStatus("pending")
-        return
-      }
-      const data = await res.json()
-      const isActive = !!data?.isActive
-      if (isActive) {
-        localStorage.setItem("partner_authenticated", "true")
-        router.push("/dashboard")
+      if (res.ok) {
+        const data = await res.json()
+        const docs = Array.isArray(data?.documents) ? data.documents : []
+        const hasDocs = docs.length > 0
+        const docsApproved = hasDocs && docs.every(d => (d?.status || '').toLowerCase() === 'approved')
+        const isActive = !!data?.isActive
+        if (isActive && docsApproved) { setActivationStatus('ready'); router.replace('/dashboard') }
+        else { setActivationStatus('pending') }
       } else {
-        setActivationStatus("pending")
+        setActivationStatus('pending')
       }
     } catch (err) {
       console.error("Failed to refresh status:", err)
