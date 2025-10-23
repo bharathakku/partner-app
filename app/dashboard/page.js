@@ -113,16 +113,26 @@ export default function Dashboard() {
 
   const handleStatusChange = async (isOnline) => {
     if (isOnline) {
-      // Check subscription from localStorage
-      let active = false
       try {
-        const uid = getCurrentUserId()
-        const sub = getStoredSubscriptionForUser(uid)
-        active = isSubscriptionActive(sub?.expiryDate)
-      } catch {}
-      if (!active) {
-        setShowSubscriptionPopup(true)
-        return
+        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+        // Check subscription status from backend
+        const res = await fetch(`${API_BASE_URL}/drivers/me`, { 
+          headers: token ? { Authorization: `Bearer ${token}` } : {} 
+        });
+        
+        if (res.ok) {
+          const driverData = await res.json();
+          const hasActiveSubscription = driverData.subscription?.status === 'active' && 
+                                      new Date(driverData.subscription?.expiryDate) > new Date();
+          
+          if (!hasActiveSubscription) {
+            setShowSubscriptionPopup(true);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Error checking subscription status:', error);
+        // If there's an error, still allow going online
       }
     }
     // Persist to backend and localStorage
@@ -186,56 +196,11 @@ export default function Dashboard() {
     }
   ]
   
-  // Show subscription popup on dashboard load if not active
-  useEffect(() => {
-    // hydrate name and online from localStorage/backend
-    try {
-      const raw = typeof window !== 'undefined' ? localStorage.getItem('user_data') : null
-      if (raw) {
-        const u = JSON.parse(raw)
-        setPartnerData(prev => ({ ...prev, name: u?.name || prev.name }))
-      }
-    } catch {}
-    // Hydrate online from backend first; fallback to localStorage
-    (async () => {
-      try {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-        const res = await fetch(`${API_BASE_URL}/drivers/me`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-        if (res.ok) {
-          const me = await res.json()
-          const online = typeof me?.isOnline === 'boolean' ? me.isOnline : false
-          setPartnerData(prev => ({ ...prev, isOnline: online }))
-          try { localStorage.setItem('driver_is_online', JSON.stringify(!!online)) } catch {}
-        } else {
-          const raw = localStorage.getItem('driver_is_online')
-          if (raw != null) setPartnerData(prev => ({ ...prev, isOnline: JSON.parse(raw) }))
-        }
-      } catch {
-        try {
-          const raw = localStorage.getItem('driver_is_online')
-          if (raw != null) setPartnerData(prev => ({ ...prev, isOnline: JSON.parse(raw) }))
-        } catch {}
-      }
-    })()
-    let active = false
-    try {
-      const uid = getCurrentUserId()
-      const sub = getStoredSubscriptionForUser(uid)
-      active = isSubscriptionActive(sub?.expiryDate)
-    } catch {}
-    if (!active) {
-      const timer = setTimeout(() => setShowSubscriptionPopup(true), 1500)
-      return () => clearTimeout(timer)
-    }
-  }, [])
-  
   const handlePlanSelection = (planId) => {
-    setSelectedPlan(planId)
-    setShowSubscriptionPopup(false)
-    
-    // Navigate to subscription main page
-    router.push('/dashboard/subscription')
-  }
+    setSelectedPlan(planId);
+    setShowSubscriptionPopup(false);
+    router.push('/dashboard/subscription');
+  };
   
   const closeSubscriptionPopup = () => {
     setShowSubscriptionPopup(false)

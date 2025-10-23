@@ -5,17 +5,42 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Crown, Check, Star, Zap, IndianRupee, CalendarDays, TimerReset } from "lucide-react"
 import BottomNav from "../../../components/BottomNav"
-import { getPlansArray, getStoredSubscription, getPlanById, getSubscriptionStatus, formatSubscriptionDateTime, isSubscriptionActive } from "../../../lib/subscription"
+import { getPlansArray, getPlanById, getSubscriptionStatus, formatSubscriptionDateTime } from "../../../lib/subscription"
+import { apiClient } from "../../../lib/api/apiClient"
 
 export default function SubscriptionPage() {
   const router = useRouter()
   const [selectedPlan, setSelectedPlan] = useState('weekly')
   const [subscription, setSubscription] = useState(null)
 
-  // Load stored subscription (demo) on mount
   useEffect(() => {
-    const sub = getStoredSubscription()
-    setSubscription(sub)
+    let mounted = true
+    ;(async () => {
+      try {
+        const driver = await apiClient.get('/drivers/me')
+        if (!mounted) return
+        if (driver && driver.subscriptionExpiry) {
+          const plan = getPlanById(driver.subscriptionPlan) || null
+          const expiry = new Date(driver.subscriptionExpiry)
+          let activation = new Date(expiry)
+          const dur = plan?.duration || 0
+          if (dur > 0) activation.setDate(activation.getDate() - dur)
+          const sub = {
+            currentPlan: plan ? plan : { id: driver.subscriptionPlan || 'plan', name: 'Active Plan' },
+            activationDate: activation.toISOString(),
+            expiryDate: expiry.toISOString(),
+            autoRenewal: false,
+            subscriptionHistory: []
+          }
+          setSubscription(sub)
+        } else {
+          setSubscription(null)
+        }
+      } catch {
+        setSubscription(null)
+      }
+    })()
+    return () => { mounted = false }
   }, [])
 
   // Get subscription plans from lib

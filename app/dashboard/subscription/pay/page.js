@@ -1,11 +1,12 @@
 "use client"
 
-import { Suspense, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ArrowLeft, IndianRupee, CreditCard, QrCode, Check, Shield, Clock, Crown, Calendar } from "lucide-react"
+import { ArrowLeft, IndianRupee, Shield, Clock, Crown, Calendar } from "lucide-react"
 import BottomNav from "../../../../components/BottomNav"
 import { formatCurrency } from "../../../../lib/utils"
-import { getPlanById, calculateExpiryDate, getStoredSubscription, setStoredSubscription, formatSubscriptionDateTime } from "../../../../lib/subscription"
+import { getPlanById, getStoredSubscription, formatSubscriptionDateTime } from "../../../../lib/subscription"
+import { apiClient, API_BASE_URL } from "../../../../lib/api/apiClient"
 
 function SubscriptionPayContent() {
   const router = useRouter()
@@ -22,9 +23,8 @@ function SubscriptionPayContent() {
     return v
   }, [amountParam])
 
-  const [method, setMethod] = useState("upi") // 'upi' | 'card'
-  const [upiId, setUpiId] = useState("")
-  const [card, setCard] = useState({ number: "", name: "", expiry: "", cvv: "" })
+  // Razorpay handles method selection inside its modal; we keep UI minimal
+  const [loading, setLoading] = useState(false)
   
   // Calculate subscription period (renew starts after existing expiry if still active)
   const existing = getStoredSubscription()
@@ -35,38 +35,267 @@ function SubscriptionPayContent() {
     return existingExpiry > now ? existingExpiry : now
   }, [existing])
   const activationDate = baseStart
-  const expiryDate = plan ? calculateExpiryDate(activationDate, plan) : null
+  const expiryDate = null
 
-  const handleProceed = () => {
-    // This would integrate with a payment gateway; here we just simulate
-    if (typeof window !== 'undefined') {
-      try {
-        // Store subscription data in localStorage (in real app, this would be API calls)
-        const prev = existing || {}
-        const history = Array.isArray(prev.subscriptionHistory) ? prev.subscriptionHistory : []
-        const record = {
-          id: Date.now(),
-          planId: plan.id,
-          planName: plan.name,
-          amount: plan.price,
-          activationDate: activationDate.toISOString(),
-          expiryDate: expiryDate.toISOString(),
-          status: 'active'
-        }
-        const subscriptionData = {
-          currentPlan: plan,
-          activationDate: activationDate.toISOString(),
-          expiryDate: expiryDate.toISOString(),
-          autoRenewal: false,
-          subscriptionHistory: [...history, record]
-        }
-        setStoredSubscription(subscriptionData)
+  // Load Razorpay script once with better error handling
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false)
+  
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    
+    // Check if Razorpay is already loaded
+    if (window.Razorpay) {
+      console.log('Razorpay already loaded')
+      setRazorpayLoaded(true)
+      return
+    }
+    
+    // Check if script is already being loaded
+    if (document.getElementById('rzp-checkout')) {
+      console.log('Razorpay script already loading')
+      return
+    }
+    
+    console.log('Loading Razorpay script...')
+    const s = document.createElement('script')
+    s.id = 'rzp-checkout'
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    s.async = true
+    
+    s.onload = () => {
+      console.log('Razorpay script loaded successfully')
+      setRazorpayLoaded(true)
+    }
+    
+    s.onerror = (error) => {
+      console.error('Failed to load Razorpay script:', error)
+      alert('Failed to load payment processor. Please refresh the page and try again.')
+    }
+    
+    document.body.appendChild(s)
+    
+    return () => {
+      try { 
+        const script = document.getElementById('rzp-checkout')
+        if (script) document.body.removeChild(script)
       } catch (e) {
-        // ignore storage errors
+        console.error('Error cleaning up Razorpay script:', e)
       }
     }
-    alert(`Successfully subscribed to ${plan?.name} for ${formatCurrency(amount)} via ${method.toUpperCase()}`)
-    router.push("/dashboard/subscription")
+  }, [])
+
+  const handleProceed = async () => {
+    if (!plan) {
+      console.error('No plan selected')
+      return
+    }
+    
+    if (!razorpayLoaded) {
+      console.error('Razorpay not loaded yet')
+      alert('Payment system is still initializing. Please wait a moment and try again.')
+      return
+    }
+    
+    if (!window.Razorpay) {
+      console.error('Razorpay is not available')
+      alert('Payment processor not available. Please refresh the page and try again.')
+      return
+    }
+    
+    setLoading(true)
+    try {
+      console.log('Creating Razorpay order for plan:', plan.id)
+      
+      // 1) Create a Razorpay order on backend
+      console.log('Sending request to create order...', { planId: plan.id })
+      
+      let response;
+      try {
+        console.log('Sending request to create order for plan:', plan.id);
+        response = await apiClient.post('/payments/razorpay/order', { planId: plan.id });
+        console.log('Order creation response:', response);
+        
+        // Handle the nested response structure
+        if (!response || !response.data || !response.data.order) {
+          console.error('Invalid response structure:', response);
+          throw new Error('Invalid response from payment server');
+        }
+        
+        // Extract the order and keyId from the response
+        const { order, keyId } = response.data;
+        
+        if (!order || !order.id) {
+          throw new Error('Invalid order data received from server');
+        }
+        
+        // Update the response to match expected format
+        response.data = {
+          order: order,
+          keyId: keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID
+        };
+      } catch (error) {
+        console.error('Error creating order:', error);
+        const errorData = error.response?.data || error.data || {};
+        const errorMessage = errorData.error || 'Failed to create payment order';
+        const errorDetails = errorData.details || errorData.message || 'Unknown error occurred';
+        
+        console.error('Error creating order:', {
+          message: error.message,
+          status: error.response?.status,
+          code: errorData.code,
+          details: errorDetails,
+          response: error.response?.data,
+          headers: error.response?.headers
+        });
+        
+        // Construct a more detailed error message
+        let userFriendlyError = errorMessage;
+        if (errorDetails && errorDetails !== errorMessage) {
+          userFriendlyError += `: ${errorDetails}`;
+        }
+        
+        // Add specific guidance for common error codes
+        if (errorData.code === 'BAD_REQUEST_ERROR') {
+          userFriendlyError += ' Please check the payment details and try again.';
+        } else if (error.response?.status === 500) {
+          userFriendlyError += ' The server encountered an error. Please try again later.';
+        } else if (!navigator.onLine) {
+          userFriendlyError = 'No internet connection. Please check your network and try again.';
+        }
+        
+        throw new Error(userFriendlyError);
+      }
+      
+      console.log('Full response from server:', response);
+      
+      const order = response.data.order;
+      const keyId = response.data.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+      
+      if (!order || !order.id) {
+        console.error('Order creation failed - missing order data:', {
+          response: response,
+          data: response?.data,
+          status: response?.status
+        });
+        throw new Error('Failed to create payment order: Missing order ID');
+      }
+      
+      if (!order || !order.id) {
+        console.error('Invalid order data in response:', { order });
+        throw new Error('Invalid order data received from server');
+      }
+      
+      console.log('Order created successfully:', { 
+        orderId: order.id, 
+        amount: order.amount,
+        currency: order.currency
+      });
+
+      // 2) Open Razorpay Checkout
+      const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user_data') || 'null') : null
+      
+      if (!keyId && !process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID) {
+        throw new Error('Razorpay key ID is not configured');
+      }
+            
+      // For test mode, use the test key and enable test mode
+      const isTestMode = process.env.NODE_ENV === 'development' || 
+                         (keyId && keyId.startsWith('rzp_test_')) ||
+                         process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.startsWith('rzp_test_');
+      
+      console.log('Razorpay Mode:', isTestMode ? 'TEST MODE' : 'LIVE MODE');
+      
+      const options = {
+        key: keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        amount: order.amount,
+        currency: order.currency || 'INR',
+        name: 'YourDelivery Partner',
+        description: `${plan.name} subscription`,
+        order_id: order.id,
+        theme: {
+          color: '#4F46E5',
+        },
+        // Enable test mode if using test credentials
+        ...(isTestMode && {
+          notes: {
+            internalTestNote: 'This is a test transaction',
+          },
+          handler: async function (response) {
+            console.log('Test payment successful:', response);
+            try {
+              // Verify the payment with your backend
+              const verify = await apiClient.post('/payments/razorpay/verify', {
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                planId: plan.id,
+              });
+
+              if (verify?.data?.success) {
+                // Show success message and redirect
+                alert('Payment successful! Your subscription is now active.');
+                router.push('/dashboard/subscription?payment=success');
+              } else {
+                throw new Error(verify?.data?.error || 'Payment verification failed');
+              }
+            } catch (error) {
+              console.error('Payment verification error:', error);
+              alert(`Payment verification failed: ${error.message}`);
+            }
+          },
+        }),
+        theme: { 
+          color: '#4F46E5',
+        },
+        prefill: {
+          name: user?.name || 'Partner',
+          email: user?.email || '',
+          contact: user?.phone || ''
+        },
+        modal: { 
+          ondismiss: function() {
+            console.log('Payment modal dismissed')
+            setLoading(false)
+          } 
+        },
+        handler: async function (response) {
+          try {
+            console.log('Payment successful:', response)
+            // Verify signature and activate subscription
+            const verify = await apiClient.post('/payments/razorpay/verify', {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              planId: plan.id,
+            })
+            
+            if (verify?.error) {
+              throw new Error(verify.error)
+            }
+            
+            alert('Payment successful! Your subscription is now active.')
+            router.push('/dashboard/subscription')
+          } catch (error) {
+            console.error('Payment verification failed:', error)
+            alert('Payment verification failed. Please contact support with your payment ID: ' + (response.razorpay_payment_id || 'unknown'))
+          } finally {
+            setLoading(false)
+          }
+        }
+      }
+      console.log('Opening Razorpay checkout...', options)
+      try {
+        const rzp = new window.Razorpay(options)
+        rzp.open()
+      } catch (e) {
+        console.error('Failed to open Razorpay:', e)
+        throw new Error('Failed to open payment window. Please try again.')
+      }
+    } catch (e) {
+      alert(e?.message || 'Payment failed to start')
+    } finally {
+      setLoading(false)
+    }
   }
 
   if (!plan) {
@@ -130,8 +359,8 @@ function SubscriptionPayContent() {
               <span className="font-semibold text-slate-800">{formatSubscriptionDateTime(activationDate)}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-slate-600">Expiry Date</span>
-              <span className="font-semibold text-slate-800">{formatSubscriptionDateTime(expiryDate)}</span>
+              <span className="text-slate-600">Payment Gateway</span>
+              <span className="font-semibold text-slate-800">Razorpay</span>
             </div>
           </div>
           
@@ -148,85 +377,21 @@ function SubscriptionPayContent() {
           </div>
         </div>
 
-        {/* Payment Methods */}
+        {/* Payment via Razorpay */}
         <div className="partner-card p-6">
-          <h3 className="text-lg font-bold text-slate-800 mb-4">Select Payment Method</h3>
-
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <button
-              onClick={() => setMethod("upi")}
-              className={`flex items-center gap-2 p-3 rounded-lg border ${method === "upi" ? "border-brand-500 bg-brand-50" : "border-slate-200 bg-white"}`}
-            >
-              <QrCode className="w-5 h-5" /> UPI
-              {method === "upi" && <Check className="w-4 h-4 text-brand-600 ml-auto" />}
-            </button>
-            <button
-              onClick={() => setMethod("card")}
-              className={`flex items-center gap-2 p-3 rounded-lg border ${method === "card" ? "border-brand-500 bg-brand-50" : "border-slate-200 bg-white"}`}
-            >
-              <CreditCard className="w-5 h-5" /> Card
-              {method === "card" && <Check className="w-4 h-4 text-brand-600 ml-auto" />}
-            </button>
-          </div>
-
-          {method === "upi" ? (
-            <div className="space-y-3">
-              <label className="text-sm font-medium text-slate-700">Enter UPI ID</label>
-              <input
-                type="text"
-                placeholder="yourname@upi"
-                value={upiId}
-                onChange={(e) => setUpiId(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-              <div className="grid grid-cols-3 gap-2 text-sm">
-                <button onClick={() => setUpiId("9876543210@upi")} className="px-3 py-2 bg-slate-100 rounded-lg hover:bg-slate-200">PhonePe</button>
-                <button onClick={() => setUpiId("yourname@oksbi")} className="px-3 py-2 bg-slate-100 rounded-lg hover:bg-slate-200">SBI</button>
-                <button onClick={() => setUpiId("yourname@okicici")} className="px-3 py-2 bg-slate-100 rounded-lg hover:bg-slate-200">ICICI</button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <label className="text-sm font-medium text-slate-700">Card Details</label>
-              <input
-                type="text"
-                inputMode="numeric"
-                placeholder="1234 5678 9012 3456"
-                value={card.number}
-                onChange={(e) => setCard({ ...card, number: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  placeholder="MM/YY"
-                  value={card.expiry}
-                  onChange={(e) => setCard({ ...card, expiry: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
-                <input
-                  type="password"
-                  placeholder="CVV"
-                  value={card.cvv}
-                  onChange={(e) => setCard({ ...card, cvv: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
-              </div>
-              <input
-                type="text"
-                placeholder="Name on card"
-                value={card.name}
-                onChange={(e) => setCard({ ...card, name: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-            </div>
-          )}
+          <h3 className="text-lg font-bold text-slate-800 mb-2">Secure Payment</h3>
+          <p className="text-sm text-slate-600 mb-4">You will pay using Razorpay. UPI and Cards are available inside the Razorpay popup.</p>
 
           <button
             onClick={handleProceed}
-            className="mt-6 w-full bg-brand-600 text-white py-3 px-6 rounded-xl text-base font-semibold hover:bg-brand-700 transition-colors"
+            disabled={loading || !razorpayLoaded}
+            className={`w-full py-4 px-6 rounded-xl font-semibold text-white transition-colors ${
+              loading || !razorpayLoaded
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-brand-600 hover:bg-brand-700'
+            }`}
           >
-            Subscribe for {formatCurrency(amount)}
+            {!razorpayLoaded ? 'Loading payment...' : loading ? 'Processing...' : `Pay ${formatCurrency(amount)}`}
           </button>
           <p className="mt-2 text-xs text-slate-500 flex items-center gap-1">
             <Clock className="w-3 h-3" /> You will be redirected back to Subscription after payment.
