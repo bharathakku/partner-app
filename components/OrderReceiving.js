@@ -14,11 +14,14 @@ const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
   const [simulationActive, setSimulationActive] = useState(false);
 
   const { profileData } = useProfile();
-  const driverId = useMemo(() => (
-    profileData?.account?.partnerId && profileData.account.partnerId !== '—'
-      ? profileData.account.partnerId
-      : null
-  ), [profileData]);
+  // Use the Driver document _id for socket room, fallback to legacy partnerId
+  const driverId = useMemo(() => {
+    const byDocId = profileData?._id || profileData?.id
+    if (byDocId && String(byDocId).trim() !== '') return String(byDocId)
+    const byPartner = profileData?.account?.partnerId
+    if (byPartner && byPartner !== '—') return String(byPartner)
+    return null
+  }, [profileData]);
   const { triggerOrderAlert, resetAudioContext } = useNotification();
   const { acceptOrder } = useOrder();
 
@@ -62,59 +65,47 @@ const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
     const MAX_RETRIES = 3;
     const POLL_INTERVAL = 30000; // 30 seconds
     
-    // Connect to socket
+    // Connect to socket (resilient: no throw on initial not-connected)
     const setupSocket = () => {
-      try {
-        const sock = connectSocket();
-        if (sock && sock.connected) {
-          socketConnected = true;
-          socketRetryCount = 0;
-          console.log('WebSocket connected, using real-time updates');
-          
-          // Clear any existing polling
-          if (timer) {
-            clearInterval(timer);
-            timer = null;
-          }
-          
-          // Join driver room to receive assignments
-          joinDriverRoom(driverId);
-          
-          // Handle socket disconnection
-          sock.on('disconnect', () => {
-            socketConnected = false;
-            console.log('WebSocket disconnected, falling back to polling');
-            startPolling();
-          });
-          
-          // Handle reconnection attempts
-          sock.on('reconnect_attempt', () => {
-            console.log('Attempting to reconnect WebSocket...');
-          });
-          
-          // Handle reconnection failure
-          sock.on('reconnect_failed', () => {
-            console.error('WebSocket reconnection failed');
-            socketConnected = false;
-            startPolling();
-          });
-        } else {
-          throw new Error('Socket not connected');
-        }
-        return sock;
-      } catch (error) {
-        console.error('WebSocket connection error:', error);
-        socketConnected = false;
-        if (socketRetryCount < MAX_RETRIES) {
-          socketRetryCount++;
-          console.log(`Retrying WebSocket connection (${socketRetryCount}/${MAX_RETRIES})...`);
-          setTimeout(setupSocket, 2000 * socketRetryCount); // Exponential backoff
-        } else {
-          console.log('Max WebSocket retries reached, falling back to polling');
-          startPolling();
-        }
+      const sock = connectSocket();
+      if (!sock) {
+        startPolling();
         return null;
       }
+      // If already connected now
+      if (sock.connected) {
+        socketConnected = true;
+        socketRetryCount = 0;
+        console.log('WebSocket connected, using real-time updates');
+        if (timer) { clearInterval(timer); timer = null; }
+        joinDriverRoom(driverId);
+      } else {
+        // Not yet connected; start polling until connect event fires
+        startPolling();
+      }
+      // Wire events once
+      try {
+        sock.off?.('connect');
+        sock.on('connect', () => {
+          socketConnected = true;
+          socketRetryCount = 0;
+          console.log('WebSocket connected');
+          joinDriverRoom(driverId);
+          if (timer) { clearInterval(timer); timer = null; }
+        });
+        sock.off?.('disconnect');
+        sock.on('disconnect', () => {
+          socketConnected = false;
+          console.log('WebSocket disconnected, falling back to polling');
+          startPolling();
+        });
+        sock.on('reconnect_failed', () => {
+          socketConnected = false;
+          console.warn('WebSocket reconnection failed; polling continues');
+          startPolling();
+        });
+      } catch {}
+      return sock;
     };
     
     // Start polling for orders
@@ -161,6 +152,13 @@ const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
 
     // Set up socket connection
     const sock = setupSocket();
+    if (sock) {
+      try {
+        sock.on('connect', () => {
+          if (driverId) joinDriverRoom(driverId);
+        });
+      } catch {}
+    }
     
     // If socket connection failed, start polling
     if (!socketConnected) {
