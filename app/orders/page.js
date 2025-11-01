@@ -3,13 +3,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOrder } from '../contexts/OrderContext';
+import { useProfile } from '../contexts/ProfileContext';
 import { 
   MapPin, Navigation, History,
   Search, Star, Package, HelpCircle
 } from 'lucide-react';
 import BottomNav from '../../components/BottomNav';
 import HelpSupportModal from '../../components/HelpSupportModal';
-import { isSubscriptionActive, getStoredSubscriptionForUser } from '../../lib/subscription';
 
 export default function OrdersPage() {
   const router = useRouter();
@@ -55,19 +55,49 @@ export default function OrdersPage() {
     setDuesBlocked(unpaid > 7);
   }, [orderHistory]);
 
-  // Resolve subscription status from localStorage on mount
+  // Get subscription status from profile context
+  const { hasActiveSubscription, profileData } = useProfile();
+
+  // Debug: Log initial profile data
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const rawUser = window.localStorage.getItem('user_data');
-      const u = rawUser ? JSON.parse(rawUser) : null;
-      const uid = u?._id || u?.id || null;
-      const sub = getStoredSubscriptionForUser(uid);
-      setIsSubscribed(isSubscriptionActive(sub?.expiryDate));
-    } catch {
-      setIsSubscribed(false);
-    }
+    console.log('Initial profile data:', profileData);
   }, []);
+
+  // Update subscription status when profile data changes
+  useEffect(() => {
+    const checkSubscription = () => {
+      console.log('--- Checking Subscription Status ---');
+      console.log('Current profile data:', profileData);
+      
+      if (!profileData || !profileData.account) {
+        console.log('No profile or account data available');
+        setIsSubscribed(false);
+        return;
+      }
+      
+      const subscription = profileData.account.subscription;
+      console.log('Subscription data from profile:', subscription);
+      
+      if (!subscription) {
+        console.log('No subscription data found in profile');
+        setIsSubscribed(false);
+        return;
+      }
+      
+      console.log('Subscription status:', subscription.status);
+      console.log('Subscription end date:', subscription.endDate);
+      
+      // Direct check without using hasActiveSubscription to see raw values
+      const isActive = subscription.status === 'active' && 
+                      subscription.endDate && 
+                      new Date(subscription.endDate) > new Date();
+      
+      console.log('Is subscription active?', isActive);
+      setIsSubscribed(isActive);
+    };
+    
+    checkSubscription();
+  }, [profileData]);
   // Redirect if there's already an active in-progress order
   useEffect(() => {
     if (currentOrder) {

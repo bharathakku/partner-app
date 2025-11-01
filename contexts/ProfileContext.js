@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 
 const ProfileContext = createContext()
 
@@ -58,7 +58,19 @@ const DEFAULT_PROFILE_DATA = {
     partnerType: "Premium",
     accountStatus: "Active",
     kycStatus: "Completed",
-    trainingStatus: "Completed"
+    trainingStatus: "Completed",
+    subscription: {
+      status: "active", // 'active', 'expired', 'none'
+      planId: "monthly",
+      startDate: new Date().toISOString(),
+      // Set end date to 30 days from now by default
+      endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      autoRenew: true,
+      // Add plan details for reference
+      planName: "Monthly Plan",
+      amount: 1399,
+      currency: "INR"
+    }
   },
 
   // Referral Information
@@ -258,8 +270,36 @@ export function ProfileProvider({ children }) {
 
   // Load profile data on mount
   useEffect(() => {
-    // In a real app, you might want to fetch profile data here
-    // fetchProfile()
+    console.log('=== Initializing Profile Context ===');
+    
+    // Try to load user data from localStorage
+    try {
+      const storedUserData = localStorage.getItem('user_data');
+      if (storedUserData) {
+        const userData = JSON.parse(storedUserData);
+        console.log('Loaded user data from localStorage:', userData);
+        
+        // Update the profile data with stored data
+        if (userData.account?.subscription) {
+          console.log('Found subscription in localStorage:', userData.account.subscription);
+          setProfileData(prev => ({
+            ...prev,
+            account: {
+              ...prev.account,
+              subscription: {
+                ...prev.account?.subscription,
+                ...userData.account.subscription
+              }
+            }
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user data from localStorage:', error);
+    }
+    
+    // In a real app, you would fetch the latest profile data here
+    // fetchProfile();
   }, [])
 
   // Recalculate profile completion when data changes
@@ -273,6 +313,96 @@ export function ProfileProvider({ children }) {
     }
   }, [profileData.name, profileData.email, profileData.phone, profileData.address, profileData.dateOfBirth, profileData.documents, profileData.vehicle])
 
+  // Check if user has active subscription
+  const hasActiveSubscription = useCallback(() => {
+    try {
+      console.log('Checking subscription status...');
+      if (!profileData?.account?.subscription) {
+        console.log('No subscription data found');
+        return false;
+      }
+      
+      const { status, endDate } = profileData.account.subscription;
+      console.log('Subscription data:', { status, endDate });
+      
+      // If no end date, consider it as no active subscription
+      if (!endDate) {
+        console.log('No end date found in subscription');
+        return false;
+      }
+      
+      // If status is explicitly set to 'expired' or 'none', return false
+      if (['expired', 'none'].includes(status)) {
+        console.log('Subscription status is expired or none');
+        return false;
+      }
+      
+      // Check if the end date is in the future
+      const isActive = new Date(endDate) > new Date();
+      console.log('Subscription is active:', isActive);
+      return isActive;
+    } catch (error) {
+      console.error('Error checking subscription status:', error);
+      return false;
+    }
+  }, [profileData]);
+
+  // Update subscription status
+  const updateSubscription = useCallback(async (subscriptionData) => {
+    console.log('=== Updating Subscription ===');
+    console.log('New subscription data:', subscriptionData);
+    
+    setProfileData(prevData => {
+      const currentSubscription = prevData.account?.subscription || {};
+      const updatedSubscription = {
+        ...currentSubscription,
+        ...subscriptionData,
+        status: 'active', // Ensure status is set to active
+        updatedAt: new Date().toISOString()
+      };
+      
+      console.log('Previous subscription:', currentSubscription);
+      console.log('Updated subscription:', updatedSubscription);
+      
+      const updated = {
+        ...prevData,
+        account: {
+          ...prevData.account,
+          subscription: updatedSubscription
+        }
+      };
+      
+      console.log('New profile data with subscription:', updated);
+      return updated;
+    });
+    
+    // Also update localStorage for persistence
+    try {
+      const userData = JSON.parse(localStorage.getItem('user_data') || '{}');
+      const currentSubscription = userData.account?.subscription || {};
+      const updatedSubscription = {
+        ...currentSubscription,
+        ...subscriptionData,
+        status: 'active',
+        updatedAt: new Date().toISOString()
+      };
+      
+      const updatedUserData = {
+        ...userData,
+        account: {
+          ...userData.account,
+          subscription: updatedSubscription
+        }
+      };
+      
+      localStorage.setItem('user_data', JSON.stringify(updatedUserData));
+      console.log('Successfully updated subscription in localStorage');
+    } catch (error) {
+      console.error('Error updating subscription in localStorage:', error);
+    }
+  }, []);
+  };
+
   const value = {
     // Data
     profileData,
@@ -284,6 +414,10 @@ export function ProfileProvider({ children }) {
     updateProfile,
     updateDocumentStatus,
     updatePerformanceStats,
+    updateSubscription,
+    
+    // Subscription
+    hasActiveSubscription,
     
     // Computed values
     profileCompletion: calculateProfileCompletion(),

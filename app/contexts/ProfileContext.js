@@ -1,7 +1,63 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
-import { usePathname } from 'next/navigation'
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+
+// Error Boundary Component
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('ProfileContext Error Boundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback || <div>Something went wrong in ProfileContext</div>;
+    }
+    return this.props.children;
+  }
+}
+
+// Helper function to safely access localStorage
+const safeLocalStorage = {
+  getItem: (key) => {
+    try {
+      if (typeof window !== 'undefined') {
+        return localStorage.getItem(key);
+      }
+      return null;
+    } catch (error) {
+      console.error('Error accessing localStorage:', error);
+      return null;
+    }
+  },
+  setItem: (key, value) => {
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(key, value);
+      }
+    } catch (error) {
+      console.error('Error setting localStorage:', error);
+    }
+  },
+  removeItem: (key) => {
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(key);
+      }
+    } catch (error) {
+      console.error('Error removing from localStorage:', error);
+    }
+  }
+};
 
 const ProfileContext = createContext()
 
@@ -48,74 +104,64 @@ const DEFAULT_PROFILE_DATA = {
     accountStatus: '—',
     kycStatus: '—',
     trainingStatus: '—',
-  },
-  referral: {
-    referralCode: '—',
-    totalReferrals: 0,
-    referralEarnings: '—',
-  },
+  }
 }
 
-function normalizeApiBase() {
-  const RAW = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4001'
-  return RAW.endsWith('/api') ? RAW : `${RAW.replace(/\/$/, '')}/api`
+// Helper function to normalize API base URL
+const normalizeApiBase = () => {
+  try {
+    // First try to get from environment
+    let base = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+    
+    // If not in environment, try to get from window.location in browser
+    if (!base && typeof window !== 'undefined') {
+      base = window.location.origin;
+    }
+    
+    // Default fallback
+    if (!base) {
+      base = 'http://localhost:4001';
+    }
+    
+    // Clean up the base URL
+    base = base.trim().replace(/\/$/, '');
+    
+    // Ensure it has /api suffix if not already present
+    if (!base.endsWith('/api')) {
+      base = `${base}/api`;
+    }
+    
+    console.log('Using API base URL:', base);
+    return base;
+  } catch (error) {
+    console.error('Error normalizing API base URL:', error);
+    return 'http://localhost:4001/api';
+  }
 }
 
-function mapDriverToProfile(driver) {
-  const user = driver?.userId || {}
-  const docsArr = Array.isArray(driver?.documents) ? driver.documents : []
-  const byType = Object.fromEntries(docsArr.map(d => [String(d.type || '').toLowerCase(), d]))
-
-  const toStatus = (s) => (s === 'approved' ? 'verified' : s === 'rejected' ? 'expired' : 'pending')
+// Helper function to map API response to profile data structure
+const mapDriverToProfile = (driver) => {
+  if (!driver) return DEFAULT_PROFILE_DATA
 
   return {
-    name: driver?.fullName || user?.name || '—',
-    email: driver?.email || user?.email || '—',
-    phone: user?.phone || '—',
-    alternatePhone: '—',
-    address: '—',
-    dateOfBirth: '—',
-    joinedDate: driver?.createdAt || new Date().toISOString(),
-    rating: '—',
-    totalRatings: 0,
-    profileComplete: 0,
+    ...DEFAULT_PROFILE_DATA,
+    ...driver,
     documents: {
-      aadharCard: { status: toStatus(byType.aadhar?.status), uploadDate: null, expiryDate: null },
-      panCard: { status: toStatus(byType.pan?.status), uploadDate: null, expiryDate: null },
-      drivingLicense: { status: toStatus(byType['drivinglicense']?.status || byType.drivingLicense?.status), uploadDate: null, expiryDate: null },
-      vehicleRC: { status: toStatus(byType['vehiclerc']?.status || byType.vehicleRC?.status), uploadDate: null, expiryDate: null },
-      vehiclePicture: { status: toStatus(byType['vehiclepicture']?.status || byType.vehiclePicture?.status), uploadDate: null, expiryDate: null },
+      ...DEFAULT_PROFILE_DATA.documents,
+      ...(driver.documents || {})
     },
     vehicle: {
-      type: driver?.vehicleType || '—',
-      brand: '—',
-      model: '—',
-      registrationNumber: driver?.vehicleNumber || '—',
-      color: '—',
-      yearOfManufacture: '—',
+      ...DEFAULT_PROFILE_DATA.vehicle,
+      ...(driver.vehicle || {})
     },
     performance: {
-      totalOrders: 0,
-      completedOrders: 0,
-      cancelledOrders: 0,
-      completionRate: 0,
-      onTimeDeliveryRate: 0,
-      avgDeliveryTime: '—',
-      totalEarnings: '—',
-      thisMonthEarnings: '—',
+      ...DEFAULT_PROFILE_DATA.performance,
+      ...(driver.performance || {})
     },
     account: {
-      partnerId: String(driver?._id || '—'),
-      partnerType: driver?.companyName ? 'Company' : 'Individual',
-      accountStatus: driver?.isActive ? 'Active' : 'Inactive',
-      kycStatus: docsArr.length ? (docsArr.every(d => d.status === 'approved') ? 'Completed' : 'Pending') : 'Pending',
-      trainingStatus: '—',
-    },
-    referral: {
-      referralCode: '—',
-      totalReferrals: 0,
-      referralEarnings: '—',
-    },
+      ...DEFAULT_PROFILE_DATA.account,
+      ...(driver.account || {})
+    }
   }
 }
 
@@ -124,97 +170,216 @@ export function ProfileProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const redirectGuardRef = useRef(false)
-  const pathname = usePathname()
+  const pathname = useRouter()
 
-  const fetchProfile = async () => {
-    setIsLoading(true)
-    setError(null)
-    try {
-      const API_BASE = normalizeApiBase()
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      const onAuthRoute = typeof pathname === 'string' && pathname.startsWith('/auth')
-      const isPublicRoute = pathname === '/' || pathname.startsWith('/terms') || pathname.startsWith('/privacy')
-      const isProtectedRoute = pathname === '/profile'
-
-      // Avoid hitting drivers/me on auth pages (login/otp/kyc) to prevent repeated 403s
-      if (onAuthRoute) {
-        setIsLoading(false)
-        return
-      }
-
-      // Pre-hydrate minimal profile from last known user_data to avoid empty screens
-      try {
-        const raw = typeof window !== 'undefined' ? localStorage.getItem('user_data') : null
-        if (raw) {
-          const u = JSON.parse(raw)
-          setProfileData(prev => ({
-            ...prev,
-            name: u?.name || prev.name,
-            email: u?.email || prev.email,
-            phone: u?.phone || prev.phone,
-          }))
-        }
-      } catch {}
-
-      if (!token) {
-        if (!onAuthRoute && !isPublicRoute && typeof window !== 'undefined' && !redirectGuardRef.current) {
-          redirectGuardRef.current = true
-          setTimeout(() => { window.location.replace('/auth/login') }, 300)
-        }
-        setIsLoading(false)
-        return
-      }
-
-      const res = await fetch(`${API_BASE}/drivers/me`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        credentials: 'include',
-      })
-      if (res.status === 401) {
-        // Token invalid/expired: log out
-        try { localStorage.removeItem('auth_token'); localStorage.removeItem('user_data'); } catch {}
-        setError('Unauthorized. Please log in again.')
-        if (!onAuthRoute && typeof window !== 'undefined' && !redirectGuardRef.current) {
-          redirectGuardRef.current = true
-          setTimeout(() => { window.location.replace('/auth/login') }, 300)
-        }
-        setIsLoading(false)
-        return
-      }
-      if (res.status === 403) {
-        // Authenticated but not provisioned/needs KYC.
-        // Only redirect if user is trying to access protected areas.
-        if (isProtectedRoute && typeof window !== 'undefined' && !redirectGuardRef.current) {
-          redirectGuardRef.current = true
-          setTimeout(() => { window.location.replace('/auth/kyc') }, 200)
-        }
-        // Otherwise, keep user on the current route and surface a soft error.
-        setError('KYC required to access some features.')
-        setIsLoading(false)
-        return
-      }
-      if (res.status === 404) {
-        // No driver profile yet; allow KYC when user navigates there
-        if (isProtectedRoute && typeof window !== 'undefined' && !redirectGuardRef.current) {
-          redirectGuardRef.current = true
-          setTimeout(() => { window.location.replace('/auth/kyc') }, 200)
-        }
-        setIsLoading(false)
-        return
-      }
-      if (!res.ok) throw new Error(`Failed to load profile (HTTP ${res.status})`)
-      const driver = await res.json()
-      const mapped = mapDriverToProfile(driver)
-      setProfileData(mapped)
-    } catch (err) {
-      setError(err?.message || 'Failed to fetch profile data')
-      console.error('Profile fetch error:', err)
-    } finally {
-      setIsLoading(false)
+  // Fetch profile data with enhanced error handling
+  const fetchProfile = useCallback(async (retryCount = 0) => {
+    // Skip if we're not in a browser environment
+    if (typeof window === 'undefined') {
+      console.log('Skipping fetchProfile - not in browser environment');
+      return;
     }
-  }
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY = 1000; // 1 second
+    let controller;
+    let timeoutId;
+    
+    try {
+      console.group(`[fetchProfile] Attempt ${retryCount + 1}/${MAX_RETRIES + 1}`);
+      
+      setIsLoading(true);
+      setError(null);
+      
+      console.log('🔍 Fetching profile data...');
+      const token = safeLocalStorage.getItem('auth_token');
+      
+      if (!token) {
+        const error = new Error('No authentication token found. Please log in again.');
+        console.error('❌ Auth error:', error.message);
+        throw error;
+      }
+
+      // Setup abort controller and timeout
+      controller = new AbortController();
+      timeoutId = setTimeout(() => {
+        console.warn('⏱️  Request timed out after 10 seconds');
+        controller.abort();
+      }, 10000);
+      
+      const apiBase = normalizeApiBase();
+      const apiUrl = `${apiBase}/drivers/me`;
+      
+      console.log('🌐 API URL:', apiUrl);
+      console.log('🔑 Token present:', !!token);
+      
+      const fetchOptions = {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'include',
+        signal: controller.signal,
+        mode: 'cors',
+        cache: 'no-store',
+        redirect: 'follow'
+      };
+      
+      console.log('⚙️ Fetch options:', {
+        ...fetchOptions,
+        headers: { ...fetchOptions.headers, 'Authorization': 'Bearer [REDACTED]' }
+      });
+      
+      let response;
+      const startTime = Date.now();
+      
+      try {
+        console.log('🚀 Sending request...');
+        response = await fetch(apiUrl, fetchOptions);
+        const endTime = Date.now();
+        console.log(`✅ Request completed in ${endTime - startTime}ms`);
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        
+        const errorDetails = {
+          name: fetchError.name,
+          message: fetchError.message,
+          isAborted: fetchError.name === 'AbortError',
+          isNetworkError: !navigator.onLine ? 'Offline' : 'Online',
+          errorType: 'network'
+        };
+        
+        console.error('❌ Fetch error:', errorDetails);
+        
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Request timed out. Please check your internet connection.');
+        }
+        
+        // Network error - retry if we haven't exceeded max retries
+        if (retryCount < MAX_RETRIES) {
+          const nextRetry = retryCount + 1;
+          const retryDelay = RETRY_DELAY * Math.pow(2, retryCount);
+          console.warn(`🔄 Network error (${fetchError.message}), retrying (${nextRetry}/${MAX_RETRIES}) in ${retryDelay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          return fetchProfile(nextRetry);
+        }
+        
+        throw new Error('Unable to connect to the server. Please check your internet connection and try again.');
+      }
+      
+      // Clear the timeout since we got a response
+      clearTimeout(timeoutId);
+
+      // Log response details
+      const responseHeaders = {};
+      response.headers.forEach((value, key) => {
+        responseHeaders[key] = value;
+      });
+      
+      console.log('📥 Response status:', response.status, response.statusText);
+      console.log('📋 Response headers:', responseHeaders);
+
+      // Handle different HTTP status codes
+      if (!response.ok) {
+        // Token might be expired, clear it and redirect to login
+        if (response.status === 401) {
+          console.warn('Token expired or invalid, redirecting to login');
+          safeLocalStorage.removeItem('auth_token');
+          safeLocalStorage.removeItem('user_data');
+          
+          // Use router for navigation if available, otherwise fallback to window.location
+          if (pathname) {
+            pathname.push('/auth/login');
+          } else if (typeof window !== 'undefined') {
+            window.location.href = '/auth/login';
+          }
+          return;
+        }
+        
+        // Try to parse error response
+        let errorMessage = `Failed to fetch profile data (HTTP ${response.status})`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch (parseError) {
+          console.warn('Failed to parse error response:', parseError);
+        }
+        
+        throw new Error(errorMessage);
+      }
+
+      // Process successful response
+      try {
+        const responseText = await response.text();
+        console.log('📄 Raw API response:', responseText);
+        
+        let data;
+        try {
+          data = responseText ? JSON.parse(responseText) : {};
+          console.log('🔍 Parsed API response:', data);
+        } catch (parseError) {
+          console.error('❌ Failed to parse JSON response:', parseError);
+          throw new Error('Invalid response format from server');
+        }
+        
+        if (!data) {
+          throw new Error('Received empty response from server');
+        }
+        
+        const mapped = mapDriverToProfile(data);
+        console.log('✅ Successfully mapped profile data');
+        setProfileData(mapped);
+        
+      } catch (parseError) {
+        console.error('❌ Failed to process response:', parseError);
+        throw new Error('Failed to process server response. Please try again.');
+      }
+      
+    } catch (err) {
+      console.error('❌ Profile fetch error:', {
+        message: err.message,
+        name: err.name,
+        stack: err.stack,
+        retryCount,
+        maxRetries: MAX_RETRIES
+      });
+      
+      // Only show error if we're not in the middle of a retry
+      if (retryCount >= MAX_RETRIES) {
+        const errorMessage = err.message || 'Failed to fetch profile data. Please try again later.';
+        console.error('💥 Max retries reached, showing error to user:', errorMessage);
+        setError(errorMessage);
+      } else if (err.message.includes('token') || err.message.includes('auth') || err.message.includes('login')) {
+        // Show auth-related errors immediately
+        console.warn('🔐 Auth error detected, showing to user');
+        setError(err.message);
+      }
+      
+      // Re-throw the error to be caught by the retry mechanism
+      if (retryCount < MAX_RETRIES) {
+        throw err;
+      }
+    } finally {
+      console.log('🏁 Fetch profile attempt completed');
+      console.groupEnd();
+      setIsLoading(false);
+      
+      // Clean up any pending timeouts
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      
+      // Clean up any pending abort controllers
+      if (controller) {
+        controller = null;
+      }
+    }
+  }, [])
 
   // Update profile data
-  const updateProfile = async (updates) => {
+  const updateProfile = useCallback(async (updates) => {
     setIsLoading(true)
     setError(null)
     try {
@@ -224,21 +389,28 @@ export function ProfileProvider({ children }) {
     } catch (err) {
       setError('Failed to update profile')
       return { success: false, error: err.message }
-    } finally {
+    } finally { 
       setIsLoading(false)
     }
-  }
+  }, [])
 
-  const updateDocumentStatus = async (documentKey, status, uploadDate = null, expiryDate = null) => {
+  // Update document status
+  const updateDocumentStatus = useCallback(async (documentKey, status, uploadDate = null, expiryDate = null) => {
     setIsLoading(true)
     setError(null)
     try {
       await new Promise(resolve => setTimeout(resolve, 300))
-      const updatedDocuments = {
-        ...profileData.documents,
-        [documentKey]: { status, uploadDate: uploadDate || new Date().toISOString().split('T')[0], expiryDate }
-      }
-      setProfileData(prev => ({ ...prev, documents: updatedDocuments }))
+      setProfileData(prev => ({
+        ...prev,
+        documents: {
+          ...prev.documents,
+          [documentKey]: { 
+            status, 
+            uploadDate: uploadDate || new Date().toISOString().split('T')[0], 
+            expiryDate 
+          }
+        }
+      }))
       return { success: true }
     } catch (err) {
       setError('Failed to update document status')
@@ -246,54 +418,186 @@ export function ProfileProvider({ children }) {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
 
-  const updatePerformanceStats = (stats) => {
-    setProfileData(prev => ({ ...prev, performance: { ...prev.performance, ...stats } }))
-  }
+  // Update performance stats
+  const updatePerformanceStats = useCallback((stats) => {
+    setProfileData(prev => ({ 
+      ...prev, 
+      performance: { ...prev.performance, ...stats } 
+    }))
+  }, [])
 
+  // Calculate profile completion percentage
   const calculateProfileCompletion = useCallback(() => {
-    const requiredFields = [profileData.name, profileData.email, profileData.phone, profileData.address, profileData.dateOfBirth]
-    const requiredDocuments = ['aadharCard', 'panCard', 'drivingLicense', 'vehicleRC', 'vehiclePicture']
-    const verifiedDocs = requiredDocuments.filter(doc => profileData.documents[doc]?.status === 'verified').length
-    const fieldsComplete = requiredFields.filter(f => f && String(f).trim() !== '').length
-    const vehicleInfoComplete = Object.values(profileData.vehicle).filter(v => v && String(v).trim() !== '').length
-    const totalPoints = requiredFields.length + requiredDocuments.length + Object.keys(profileData.vehicle).length
+    const requiredFields = [
+      profileData.name,
+      profileData.email,
+      profileData.phone,
+      profileData.address,
+      profileData.dateOfBirth
+    ]
+
+    const requiredDocuments = [
+      'aadharCard',
+      'panCard',
+      'drivingLicense',
+      'vehicleRC',
+      'vehiclePicture'
+    ]
+
+    const verifiedDocs = requiredDocuments.filter(
+      doc => profileData.documents[doc]?.status === 'verified'
+    ).length
+
+    const fieldsComplete = requiredFields.filter(
+      f => f && String(f).trim() !== ''
+    ).length
+
+    const vehicleInfoComplete = Object.values(profileData.vehicle).filter(
+      v => v && String(v).trim() !== ''
+    ).length
+
+    const totalPoints = requiredFields.length + 
+                       requiredDocuments.length + 
+                       Object.keys(profileData.vehicle).length
+
     const completedPoints = fieldsComplete + verifiedDocs + vehicleInfoComplete
-    return Math.round((completedPoints / totalPoints) * 100)
+    return Math.round((completedPoints / Math.max(totalPoints, 1)) * 100)
   }, [profileData])
 
-  const getUrgentActions = () => {
+  // Get urgent actions
+  const getUrgentActions = useCallback(() => {
     const actions = []
+    const docNames = {
+      aadharCard: 'Aadhar Card',
+      panCard: 'PAN Card',
+      drivingLicense: 'Driving License',
+      vehicleRC: 'Vehicle RC',
+      vehiclePicture: 'Vehicle Picture'
+    }
+
     Object.entries(profileData.documents).forEach(([key, doc]) => {
       if (doc.status === 'expired') {
-        const names = { aadharCard: 'Aadhar Card', panCard: 'PAN Card', drivingLicense: 'Driving License', vehicleRC: 'Vehicle RC', vehiclePicture: 'Vehicle Picture' }
-        actions.push({ type: 'document_expired', message: `${names[key]} has expired`, priority: 'high', action: `Upload renewed ${names[key]}` })
+        actions.push({
+          type: 'document_expired',
+          message: `${docNames[key] || key} has expired`,
+          priority: 'high',
+          action: `Upload renewed ${docNames[key] || key}`
+        })
       }
       if (doc.status === 'pending') {
-        const names = { aadharCard: 'Aadhar Card', panCard: 'PAN Card', drivingLicense: 'Driving License', vehicleRC: 'Vehicle RC', vehiclePicture: 'Vehicle Picture' }
-        actions.push({ type: 'document_pending', message: `${names[key]} verification is pending`, priority: 'medium', action: `Wait for ${names[key]} verification` })
+        actions.push({
+          type: 'document_pending',
+          message: `${docNames[key] || key} verification is pending`,
+          priority: 'medium',
+          action: `Wait for ${docNames[key] || key} verification`
+        })
       }
     })
-    const completion = calculateProfileCompletion()
-    if (completion < 90) actions.push({ type: 'profile_incomplete', message: `Profile is ${completion}% complete`, priority: 'low', action: 'Complete your profile to get more orders' })
-    const priorities = { high: 3, medium: 2, low: 1 }
-    return actions.sort((a, b) => priorities[b.priority] - priorities[a.priority])
-  }
 
-  useEffect(() => {
-    fetchProfile()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname])
-
-  useEffect(() => {
     const completion = calculateProfileCompletion()
-    if (completion !== profileData.profileComplete) {
-      setProfileData(prev => ({ ...prev, profileComplete: completion }))
+    if (completion < 90) {
+      actions.push({
+        type: 'profile_incomplete',
+        message: 'Your profile is incomplete',
+        priority: 'high',
+        action: 'Complete your profile'
+      })
     }
-  }, [calculateProfileCompletion, profileData.profileComplete])
 
-  const value = {
+    return actions.sort((a, b) => {
+      const priorityOrder = { high: 0, medium: 1, low: 2 }
+      return priorityOrder[a.priority] - priorityOrder[b.priority]
+    })
+  }, [profileData.documents, calculateProfileCompletion])
+
+  // Format date helper
+  const formatDate = useCallback((dateString) => {
+    try {
+      return dateString ? new Date(dateString).toLocaleDateString('en-IN', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric', 
+        timeZone: 'UTC' 
+      }) : '—'
+    } catch (e) {
+      console.error('Error formatting date:', e)
+      return '—'
+    }
+  }, [])
+
+  // Check if document is expiring soon
+  const isDocumentExpiringSoon = useCallback((documentKey, daysThreshold = 30) => {
+    try {
+      const doc = profileData.documents[documentKey]
+      if (!doc?.expiryDate) return false
+      const expiryDate = new Date(doc.expiryDate)
+      const today = new Date()
+      const daysUntilExpiry = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24))
+      return daysUntilExpiry <= daysThreshold && daysUntilExpiry > 0
+    } catch (e) {
+      console.error('Error checking document expiry:', e)
+      return false
+    }
+  }, [profileData.documents])
+
+  // Effect to load profile on mount and handle retries
+  useEffect(() => {
+    let isMounted = true;
+    let retryTimeout;
+    const MAX_RETRIES = 3;
+    let retryCount = 0;
+
+    const loadProfile = async () => {
+      if (!isMounted) return;
+      
+      try {
+        await fetchProfile(retryCount);
+      } catch (err) {
+        if (isMounted && retryCount < MAX_RETRIES) {
+          retryCount++;
+          // Exponential backoff: 1s, 2s, 4s, etc.
+          const delay = 1000 * Math.pow(2, retryCount - 1);
+          console.log(`Retrying in ${delay}ms... (${retryCount}/${MAX_RETRIES})`);
+          
+          retryTimeout = setTimeout(() => {
+            if (isMounted) loadProfile();
+          }, delay);
+        }
+      }
+    };
+
+    loadProfile();
+
+    return () => {
+      isMounted = false;
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
+  }, [fetchProfile]);
+
+  // Memoize the context value to prevent unnecessary re-renders
+  const contextValue = useMemo(() => ({
+    // State values
+    profileData,
+    isLoading,
+    error,
+    
+    // Actions
+    fetchProfile: () => fetchProfile(0), // Always start with retry count 0
+    updateProfile,
+    updateDocumentStatus,
+    updatePerformanceStats,
+    retryFetchProfile: () => fetchProfile(0), // Explicit retry function
+    
+    // Computed values
+    profileCompletion: calculateProfileCompletion(),
+    urgentActions: getUrgentActions(),
+    
+    // Helper functions
+    formatDate,
+    isDocumentExpiringSoon
+  }), [
     profileData,
     isLoading,
     error,
@@ -301,31 +605,49 @@ export function ProfileProvider({ children }) {
     updateProfile,
     updateDocumentStatus,
     updatePerformanceStats,
-    profileCompletion: calculateProfileCompletion(),
-    urgentActions: getUrgentActions(),
-    formatDate: (dateString) => new Date(dateString).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }),
-    isDocumentExpiringSoon: (documentKey, daysThreshold = 30) => {
-      const doc = profileData.documents[documentKey]
-      if (!doc?.expiryDate) return false
-      const expiryDate = new Date(doc.expiryDate)
-      const today = new Date()
-      const daysUntilExpiry = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24))
-      return daysUntilExpiry <= daysThreshold && daysUntilExpiry > 0
-    },
+    calculateProfileCompletion,
+    getUrgentActions,
+    formatDate,
+    isDocumentExpiringSoon
+  ])
+
+  // Only render the ErrorBoundary in client-side
+  if (typeof window === 'undefined') {
+    return (
+      <ProfileContext.Provider value={contextValue}>
+        {children}
+      </ProfileContext.Provider>
+    );
   }
 
+  // Client-side rendering with ErrorBoundary
   return (
-    <ProfileContext.Provider value={value}>
-      {children}
-    </ProfileContext.Provider>
+    <ErrorBoundary fallback={
+      <div className="p-4 bg-red-50 text-red-700">
+        <h3 className="font-bold">Profile Error</h3>
+        <p>There was an error loading your profile data. Please try refreshing the page.</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="mt-2 px-4 py-2 bg-red-100 hover:bg-red-200 rounded"
+        >
+          Refresh Page
+        </button>
+      </div>
+    }>
+      <ProfileContext.Provider value={contextValue}>
+        {children}
+      </ProfileContext.Provider>
+    </ErrorBoundary>
   )
 }
 
-export function useProfile() {
+// Custom hook to use the profile context
+export const useProfile = () => {
   const context = useContext(ProfileContext)
-  if (!context) throw new Error('useProfile must be used within a ProfileProvider')
+  if (context === undefined) {
+    throw new Error('useProfile must be used within a ProfileProvider')
+  }
   return context
 }
 
 export default ProfileContext
-

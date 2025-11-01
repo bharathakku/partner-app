@@ -85,44 +85,215 @@ function LoginInner() {
   }
 
   const handleLogin = async (e) => {
-    e.preventDefault()
-    setError("")
-    setSuccess("")
-    if (parseInt(captchaAnswer, 10) !== (captchaA + captchaB)) {
-      setError("Captcha is incorrect")
-      return
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+    
+    // Input validation
+    if (!email.trim()) {
+      setError("Please enter your email or phone");
+      return;
     }
-    setIsLoading(true)
+    
+    if (!password) {
+      setError("Please enter your password");
+      return;
+    }
+
+    if (parseInt(captchaAnswer, 10) !== (captchaA + captchaB)) {
+      setError("Captcha is incorrect");
+      return;
+    }
+
+    setIsLoading(true);
+    let controller;
+    let timeoutId;
+
     try {
-      const digits = (email || '').replace(/\D/g, '')
-      const isPhone = /^\d{10}$/.test(digits)
-      const payload = isPhone ? { phone: `+91${digits}`, password } : { email, password }
-      const res = await fetch(`${API_BASE}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      })
-      const data = await res.json()
-      if (!res.ok || !data.token) {
-        const msg = data?.error || (res.status === 401 ? 'Invalid email/phone or password' : 'Login failed')
-        throw new Error(msg)
+      console.group("🚀 Login Attempt");
+      
+      // Get the API base URL with proper fallbacks
+      const API_BASE = (() => {
+        const envBase = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+        const base = (envBase && envBase.trim().length > 0)
+          ? envBase.trim().replace(/\/$/, '')
+          : (typeof window !== 'undefined' ? `${window.location.origin}` : '');
+        const apiBase = base.endsWith('/api') ? base : `${base}/api`;
+        console.log('🌐 Using API Base:', apiBase);
+        return apiBase;
+      })();
+
+      // Setup abort controller for request timeout
+      controller = new AbortController();
+      timeoutId = setTimeout(() => {
+        console.warn('⏱️  Request timeout reached (10s)');
+        controller.abort();
+      }, 10000);
+
+      // Prepare request data
+      const requestData = {
+        email: email.trim(),
+        password,
+        captcha: parseInt(captchaAnswer, 10),
+        deviceType: 'web',
+        role: 'driver',
+        timestamp: new Date().toISOString()
+      };
+
+      console.log('🔑 Login request:', {
+        url: `${API_BASE}/auth/login`,
+        method: 'POST',
+        credentials: 'include',
+        body: { ...requestData, password: '[REDACTED]' }
+      });
+
+      // Make the API request
+      const startTime = Date.now();
+      let response;
+      try {
+        response = await fetch(`${API_BASE}/auth/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          body: JSON.stringify(requestData),
+          credentials: 'include',
+          signal: controller.signal,
+          mode: 'cors',
+          cache: 'no-store',
+          redirect: 'follow'
+        });
+        
+        const endTime = Date.now();
+        console.log(`✅ Request completed in ${endTime - startTime}ms`);
+        console.log('📥 Response status:', response.status, response.statusText);
+        
+        // Log response headers
+        const responseHeaders = {};
+        response.headers.forEach((value, key) => {
+          responseHeaders[key] = value;
+        });
+        console.log('📋 Response headers:', responseHeaders);
+        
+        // Handle response body
+        let responseText;
+        try {
+          responseText = await response.text();
+          console.log('📄 Raw response:', responseText);
+          
+          let data;
+          try {
+            data = responseText ? JSON.parse(responseText) : {};
+            console.log('🔍 Parsed response data:', data);
+          } catch (parseError) {
+            console.error('❌ Failed to parse JSON response:', parseError);
+            throw new Error('Invalid response format from server');
+          }
+
+          // Handle non-OK responses
+          if (!response.ok) {
+            const errorMessage = data?.message || 
+                              data?.error || 
+                              `Login failed (HTTP ${response.status})`;
+            console.error('❌ API Error:', {
+              status: response.status,
+              message: errorMessage,
+              data: data
+            });
+            throw new Error(errorMessage);
+          }
+
+          // Handle successful response
+          if (!data.token) {
+            throw new Error('No authentication token received from server');
+          }
+
+          console.log('🔑 Authentication successful, token received');
+          
+          // Store authentication data
+          localStorage.setItem("auth_token", data.token);
+          if (data.user) {
+            console.log('👤 User data received:', data.user);
+            localStorage.setItem("user_data", JSON.stringify(data.user));
+          }
+          
+          // Clean up any cached data
+          try {
+            clearStoredSubscription();
+            const uid = data?.user?._id || data?.user?.id;
+            if (uid) clearStoredSubscriptionForUser(uid);
+          } catch (cleanupError) {
+            console.warn('⚠️ Error cleaning up subscription cache:', cleanupError);
+          }
+          
+          setSuccess("Login successful!");
+          await routeAfterAuth(data.token);
+          
+        } catch (responseError) {
+          console.error('❌ Error processing response:', responseError);
+          throw responseError;
+        }
+        
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        
+        // Handle network errors
+        if (fetchError.name === 'AbortError') {
+          console.error('⏱️  Request was aborted (likely due to timeout)');
+          throw new Error('Request timed out. Please check your internet connection and try again.');
+        }
+        
+        // Handle network connectivity issues
+        if (!navigator.onLine) {
+          console.error('🌐 Network is offline');
+          throw new Error('You appear to be offline. Please check your internet connection.');
+        }
+        
+        // Handle CORS issues
+        if (fetchError.name === 'TypeError' && fetchError.message.includes('Failed to fetch')) {
+          console.error('🚫 Possible CORS issue - Failed to fetch:', fetchError);
+          throw new Error('Cannot connect to the server. Please check if the server is running and accessible.');
+        }
+        
+        console.error('❌ Fetch error:', {
+          name: fetchError.name,
+          message: fetchError.message,
+          stack: fetchError.stack
+        });
+        
+        throw fetchError;
       }
-      localStorage.setItem("auth_token", data.token)
-      localStorage.setItem("user_data", JSON.stringify(data.user))
-      // Clear any legacy/global subscription cache and user-scoped cache to avoid cross-user leakage
-      try {
-        clearStoredSubscription()
-      } catch {}
-      try {
-        const uid = data?.user?._id || data?.user?.id
-        if (uid) clearStoredSubscriptionForUser(uid)
-      } catch {}
-      setSuccess("Login successful!")
-      await routeAfterAuth(data.token)
+      
     } catch (err) {
-      setError(err.message || "An error occurred while logging in")
+      console.error('❌ Login failed:', {
+        error: err,
+        message: err.message,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Provide user-friendly error messages
+      let userFriendlyMessage = err.message || 'An error occurred while logging in. Please try again.';
+      
+      // Handle specific error cases
+      if (err.message.includes('Failed to fetch')) {
+        userFriendlyMessage = 'Unable to connect to the server. Please check your internet connection and try again.';
+      } else if (err.message.includes('NetworkError')) {
+        userFriendlyMessage = 'Network error. Please check your internet connection.';
+      } else if (err.message.includes('timeout') || err.name === 'AbortError') {
+        userFriendlyMessage = 'Request timed out. The server is taking too long to respond.';
+      } else if (err.message.includes('CORS')) {
+        userFriendlyMessage = 'Connection error. Please try again or contact support if the problem persists.';
+      }
+      
+      setError(userFriendlyMessage);
+      regenCaptcha(); // Generate a new captcha on error
+      
     } finally {
-      setIsLoading(false)
+      console.groupEnd();
+      clearTimeout(timeoutId);
+      setIsLoading(false);
     }
   }
 

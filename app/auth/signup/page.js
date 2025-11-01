@@ -41,14 +41,18 @@ export default function PartnerSignupPage() {
     e.preventDefault()
     setError("")
     setSuccess("")
+    setIsLoading(true)
 
     if (!name.trim()) {
       setError("Please enter your full name")
+      setIsLoading(false)
       return
     }
+    
     const digits = (phone || '').replace(/\D/g, '')
     if (!/^\d{10}$/.test(digits)) {
       setError("Please enter a valid 10-digit mobile number")
+      setIsLoading(false)
       return
     }
     if (parseInt(captchaAnswer, 10) !== (captchaA + captchaB)) {
@@ -58,19 +62,86 @@ export default function PartnerSignupPage() {
 
     setIsLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/auth/signup`, {
+      // Prepare the signup data with all possible fields
+      const signupData = {
+        // Basic information
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        phone: `+91${digits}`,
+        password: password,
+        
+        // Authentication
+        captcha: parseInt(captchaAnswer, 10),
+        
+        // User type and role
+        role: 'driver',
+        userType: 'driver',
+        accountType: 'individual',
+        
+        // Device and source tracking
+        deviceType: 'web',
+        deviceName: 'web-browser',
+        deviceId: 'web-' + Math.random().toString(36).substring(2, 15),
+        
+        // Additional metadata
+        signupMethod: 'email',
+        source: 'web',
+        referrer: 'direct',
+        
+        // Timestamps
+        createdAt: new Date().toISOString(),
+        
+        // Status flags
+        isEmailVerified: false,
+        isPhoneVerified: false,
+        isActive: true,
+        
+        // Preferences (if any)
+        preferences: {
+          notifications: true,
+          marketing: false
+        }
+      };
+      
+      console.log('Sending signup request with data:', JSON.stringify(signupData, null, 2));
+      
+      const response = await fetch(`/api/proxy/signup`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, phone: `+91${digits}`, password, role: "driver" })
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify(signupData),
       })
-      const data = await res.json()
-      if (!res.ok || !data.token) throw new Error(data.error || "Signup failed")
-
-      localStorage.setItem("auth_token", data.token)
-      localStorage.setItem("user_data", JSON.stringify(data.user))
-      setSuccess("Account created successfully!")
-      // After partner signup, send to KYC
-      router.replace("/auth/kyc")
+      
+      let data;
+      try {
+        data = await response.json();
+      } catch (e) {
+        console.error('Failed to parse JSON response:', e);
+        throw new Error('Invalid response from server');
+      }
+      
+      console.log('Signup response:', { status: response.status, data });
+      
+      if (!response.ok) {
+        // If there's an error message in the response, use it
+        const errorMessage = data?.message || data?.error || "Signup failed";
+        throw new Error(errorMessage);
+      }
+      
+      // If we get here, the request was successful
+      if (data.token) {
+        localStorage.setItem("auth_token", data.token);
+        if (data.user) {
+          localStorage.setItem("user_data", JSON.stringify(data.user));
+        }
+        setSuccess("Account created successfully!");
+        // After partner signup, send to KYC
+        router.replace("/auth/kyc");
+      } else {
+        throw new Error("No token received in response");
+      }
     } catch (err) {
       setError(err.message || "Network error. Please try again.")
     } finally {

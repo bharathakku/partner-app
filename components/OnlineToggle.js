@@ -5,7 +5,7 @@ import { Power, Loader2 } from "lucide-react"
 import { cn } from "../lib/utils"
 import { useRouter, usePathname } from "next/navigation"
 
-export default function OnlineToggle({ initialStatus = false, onStatusChange, isOnline, onToggle }) {
+export default function OnlineToggle({ initialStatus = false, onStatusChange, isOnline, onToggle, variant = 'full' }) {
   const [internalIsOnline, setInternalIsOnline] = useState(initialStatus)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
@@ -16,23 +16,84 @@ export default function OnlineToggle({ initialStatus = false, onStatusChange, is
   const handleStateChange = onToggle || setInternalIsOnline
 
   const handleToggle = async () => {
-    setIsLoading(true)
+    setIsLoading(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      const newStatus = !currentOnlineState;
+      const token = localStorage.getItem('auth_token');
+      const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4001').replace(/\/+$/, '');
       
-      const newStatus = !currentOnlineState
-      handleStateChange(newStatus)
-      onStatusChange?.(newStatus)
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
       
-      // Stay on current page when going online
-      // Order popup will appear directly on dashboard after 3 seconds
+      const apiUrl = `${API_BASE_URL}/drivers/me/online`;
+      console.log('Toggling status to:', newStatus);
+      console.log('Using API URL:', apiUrl);
+      
+      // Make direct API call to backend
+      const response = await fetch(apiUrl, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ isOnline: newStatus })
+      });
+
+      console.log('Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch (e) {
+          errorData = { message: errorText };
+        }
+        throw new Error(errorData.message || 'Failed to update status');
+      }
+      
+      // Update local state only after successful API call
+      handleStateChange(newStatus);
+      onStatusChange?.(newStatus);
+      
+      // Show success message
+      console.log(`Successfully ${newStatus ? 'went online' : 'went offline'}`);
+      
     } catch (error) {
-      console.error("Failed to toggle status:", error)
+      console.error("Failed to toggle status:", error);
+      // Show error to user (you can implement a toast or alert here)
+      alert(error.message || 'Failed to update status');
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
+  }
+
+  if (variant === 'compact') {
+    return (
+      <button
+        onClick={handleToggle}
+        disabled={isLoading}
+        className={cn(
+          "flex items-center justify-center h-9 px-3 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap",
+          currentOnlineState
+            ? "bg-slate-100 text-slate-800 hover:bg-slate-200"
+            : "bg-success-500 text-white hover:bg-success-600"
+        )}
+      >
+        {isLoading ? (
+          <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
+        ) : (
+          <Power className={cn(
+            "w-3.5 h-3.5 mr-1.5",
+            currentOnlineState ? "text-slate-600" : "text-white"
+          )} />
+        )}
+        {currentOnlineState ? "Online" : "Go Online"}
+      </button>
+    );
   }
 
   return (
@@ -69,13 +130,22 @@ export default function OnlineToggle({ initialStatus = false, onStatusChange, is
           onClick={handleToggle}
           disabled={isLoading}
           className={cn(
-            "px-8 py-3 rounded-xl font-semibold text-base transition-all duration-200 disabled:opacity-50",
+            "w-full py-3 px-6 rounded-lg font-semibold text-white transition-all duration-200",
             currentOnlineState
-              ? "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
-              : "bg-gradient-to-r from-success-500 to-success-600 text-white hover:from-success-600 hover:to-success-700 shadow-lg hover:shadow-xl"
+              ? "bg-slate-800 hover:bg-slate-900"
+              : "bg-success-500 hover:bg-success-600 shadow-md shadow-success-200"
           )}
         >
-          {isLoading ? "Switching..." : currentOnlineState ? "Go Offline" : "Go Online"}
+          {isLoading ? (
+            <span className="flex items-center justify-center">
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              {currentOnlineState ? "Going Offline..." : "Going Online..."}
+            </span>
+          ) : currentOnlineState ? (
+            "Go Offline"
+          ) : (
+            "Go Online"
+          )}
         </button>
       </div>
     </div>

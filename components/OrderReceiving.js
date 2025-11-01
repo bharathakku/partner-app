@@ -53,41 +53,92 @@ const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
 
   // Real-time socket hookup and fallback polling (after showNewOrderPopup is defined)
   useEffect(() => {
-    // Connect socket
-    const sock = connectSocket();
-
     if (!driverId) return;
-
-    // Join driver room to receive assignments
-    joinDriverRoom(driverId);
-
-    // Handle assignment push
-    const off = onOrderAssigned(async (payload) => {
-      // Normalize payload for UI
-      const order = {
-        id: payload.orderId,
-        customerName: 'New Booking',
-        partnerEarnings: payload.price ?? 0,
-        distance: (payload.distanceKm ?? 0) + ' km',
-        pickupLocation: { address: payload?.from?.address || '—' },
-        customerLocation: { address: payload?.to?.address || '—' },
-        parcelDetails: { description: `${payload.vehicleType || ''}`.trim() || 'Delivery' },
-        orderTime: new Date(payload.at || Date.now()).toISOString(),
-        paymentMethod: 'Cash on Delivery',
-      };
-      await showNewOrderPopup(order);
-      setIncomingOrders(prev => [payload, ...prev]);
-    });
-
-    // Fallback polling for assigned orders
+    
+    let isMounted = true;
     let timer;
-    async function pollAssigned() {
+    let socketConnected = false;
+    let socketRetryCount = 0;
+    const MAX_RETRIES = 3;
+    const POLL_INTERVAL = 30000; // 30 seconds
+    
+    // Connect to socket
+    const setupSocket = () => {
+      try {
+        const sock = connectSocket();
+        if (sock && sock.connected) {
+          socketConnected = true;
+          socketRetryCount = 0;
+          console.log('WebSocket connected, using real-time updates');
+          
+          // Clear any existing polling
+          if (timer) {
+            clearInterval(timer);
+            timer = null;
+          }
+          
+          // Join driver room to receive assignments
+          joinDriverRoom(driverId);
+          
+          // Handle socket disconnection
+          sock.on('disconnect', () => {
+            socketConnected = false;
+            console.log('WebSocket disconnected, falling back to polling');
+            startPolling();
+          });
+          
+          // Handle reconnection attempts
+          sock.on('reconnect_attempt', () => {
+            console.log('Attempting to reconnect WebSocket...');
+          });
+          
+          // Handle reconnection failure
+          sock.on('reconnect_failed', () => {
+            console.error('WebSocket reconnection failed');
+            socketConnected = false;
+            startPolling();
+          });
+        } else {
+          throw new Error('Socket not connected');
+        }
+        return sock;
+      } catch (error) {
+        console.error('WebSocket connection error:', error);
+        socketConnected = false;
+        if (socketRetryCount < MAX_RETRIES) {
+          socketRetryCount++;
+          console.log(`Retrying WebSocket connection (${socketRetryCount}/${MAX_RETRIES})...`);
+          setTimeout(setupSocket, 2000 * socketRetryCount); // Exponential backoff
+        } else {
+          console.log('Max WebSocket retries reached, falling back to polling');
+          startPolling();
+        }
+        return null;
+      }
+    };
+    
+    // Start polling for orders
+    const startPolling = () => {
+      if (timer) return; // Already polling
+      console.log('Starting order polling...');
+      
+      // Initial fetch
+      pollAssigned();
+      
+      // Set up interval for polling
+      timer = setInterval(pollAssigned, POLL_INTERVAL);
+    };
+    
+    // Poll for assigned orders
+    const pollAssigned = async () => {
+      if (!isMounted) return;
+      
       try {
         const res = await ordersService.getAssignedForMe();
-        if (res?.success) {
+        if (res?.success && isMounted) {
           const arr = Array.isArray(res.data) ? res.data : [];
           // Show the newest assigned order if no popup active
-          if (!currentOrderPopup && arr.length) {
+          if (arr.length > 0 && !currentOrderPopup) {
             const latest = arr[0];
             const order = {
               id: latest._id,
@@ -108,12 +159,52 @@ const OrderReceiving = ({ isOnline, onOrderUpdate }) => {
     }
     pollAssigned();
 
+    // Set up socket connection
+    const sock = setupSocket();
+    
+    // If socket connection failed, start polling
+    if (!socketConnected) {
+      startPolling();
+    }
+    
+    // Handle assignment push
+    const off = onOrderAssigned(async (payload) => {
+      if (!isMounted) return;
+      
+      // If we were polling, stop the polling since we have a working socket connection
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+      
+      // Normalize payload for UI
+      const order = {
+        id: payload.orderId,
+        customerName: 'New Booking',
+        partnerEarnings: payload.price ?? 0,
+        distance: (payload.distanceKm ?? 0) + ' km',
+        pickupLocation: { address: payload?.from?.address || '—' },
+        customerLocation: { address: payload?.to?.address || '—' },
+        parcelDetails: { description: `${payload.vehicleType || ''}`.trim() || 'Delivery' },
+        orderTime: new Date(payload.at || Date.now()).toISOString(),
+        paymentMethod: 'Cash on Delivery',
+      };
+      
+      await showNewOrderPopup(order);
+      if (isMounted) {
+        setIncomingOrders(prev => [payload, ...prev]);
+      }
+    });
+
+    // Clean up
     return () => {
-      try { off && off(); } catch {}
-      try { leaveDriverRoom(driverId); } catch {}
-      try { clearTimeout(timer); } catch {}
+      isMounted = false;
+      off?.();
+      if (timer) clearInterval(timer);
+      if (sock?.connected) sock.disconnect();
+      console.log('OrderReceiving cleanup complete');
     };
-  }, [driverId, currentOrderPopup, showNewOrderPopup]);
+  }, [driverId, showNewOrderPopup, currentOrderPopup]);
 
   const handleOrderAccept = useCallback(async () => {
     if (!currentOrderPopup) return;

@@ -38,18 +38,37 @@ export default function SettingsPage() {
 
 
   const shareReferralCode = () => {
+    const referralCode = profileData?.referral?.referralCode || 'N/A';
+    const shareText = `Join our delivery platform using my referral code: ${referralCode}`;
+    
     if (navigator.share) {
       navigator.share({
         title: "Join as Delivery Partner",
-        text: `Join our delivery platform using my referral code: ${profileData.referral.referralCode}`,
-        url: `https://partner-app.com/signup?ref=${profileData.referral.referralCode}`
-      })
+        text: shareText,
+        url: `https://partner-app.com/signup?ref=${referralCode}`
+      }).catch(err => {
+        console.error('Error sharing:', err);
+        // Fallback to clipboard if sharing fails
+        navigator.clipboard.writeText(shareText);
+        alert("Referral message copied to clipboard!");
+      });
     } else {
       // Fallback to clipboard
-      navigator.clipboard.writeText(`Join our delivery platform using my referral code: ${profileData.referral.referralCode}`)
-      alert("Referral message copied to clipboard!")
+      navigator.clipboard.writeText(shareText);
+      alert("Referral message copied to clipboard!");
     }
   }
+
+  // Get safe values with defaults
+  const safeProfileData = {
+    name: profileData?.name || 'User',
+    phone: profileData?.phone || '',
+    rating: profileData?.rating || 0,
+    referral: {
+      referralCode: profileData?.referral?.referralCode || 'LOADING...',
+      totalReferrals: profileData?.referral?.totalReferrals || 0
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-50 via-white to-brand-100 pb-20">
@@ -71,11 +90,15 @@ export default function SettingsPage() {
               <User className="w-8 h-8 text-white" />
             </div>
             <div className="flex-1">
-              <h3 className="text-lg font-bold text-slate-800">{profileData.name}</h3>
-              <p className="text-sm text-slate-600">{profileData.phone}</p>
+              <h3 className="text-lg font-bold text-slate-800">{safeProfileData.name}</h3>
+              {safeProfileData.phone && (
+                <p className="text-sm text-slate-600">{safeProfileData.phone}</p>
+              )}
               <div className="flex items-center space-x-1 mt-1">
                 <Star className="w-4 h-4 text-warning-500 fill-current" />
-                <span className="text-sm font-semibold text-warning-600">{profileData.rating} Rating</span>
+                <span className="text-sm font-semibold text-warning-600">
+                  {safeProfileData.rating > 0 ? `${safeProfileData.rating} Rating` : 'No ratings yet'}
+                </span>
               </div>
             </div>
             <Link href="/profile" className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
@@ -101,11 +124,15 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="text-sm text-purple-600">Your Referral Code</p>
-                <p className="text-xl font-bold text-purple-700">{profileData.referral.referralCode}</p>
+                <p className="text-xl font-bold text-purple-700">
+                  {safeProfileData.referral.referralCode}
+                </p>
               </div>
               <div className="text-right">
                 <p className="text-sm text-purple-600">Total Referrals</p>
-                <p className="text-xl font-bold text-purple-700">{profileData.referral.totalReferrals}</p>
+                <p className="text-xl font-bold text-purple-700">
+                  {safeProfileData.referral.totalReferrals}
+                </p>
               </div>
             </div>
             <button

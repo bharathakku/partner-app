@@ -1,11 +1,27 @@
 import { NextResponse } from 'next/server';
 
-// Allow partner app auth routes to render locally without external redirects
-export function middleware() {
-  return NextResponse.next();
+export function middleware(request) {
+  // Handle preflight requests
+  if (request.method === 'OPTIONS') {
+    const response = NextResponse.next();
+    addCorsHeaders(response);
+    return response;
+  }
+
+  // For all other requests, add CORS headers
+  const response = NextResponse.next();
+  addCorsHeaders(response);
+  return response;
 }
 
-// Still scope middleware to auth paths (no-op pass-through)
+function addCorsHeaders(response) {
+  response.headers.set('Access-Control-Allow-Origin', '*');
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  response.headers.set('Access-Control-Allow-Credentials', 'true');
+  return response;
+}
+
 export const config = {
-  matcher: ['/auth/:path*'],
+  matcher: ['/api/:path*', '/auth/:path*'],
 };
