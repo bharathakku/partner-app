@@ -24,10 +24,11 @@ export default function DriverLiveMapPage() {
   const mapRef = useRef(null)
   const map = useRef(null)
   const marker = useRef(null)
-  const zoneCircle = useRef(null)
+  const zonesLayersRef = useRef([])
   const [error, setError] = useState('')
   const [watchId, setWatchId] = useState(null)
   const [status, setStatus] = useState({ lat: null, lng: null, accuracy: null, ts: null })
+  const [zones, setZones] = useState([])
 
   useEffect(() => {
     let mounted = true
@@ -37,6 +38,24 @@ export default function DriverLiveMapPage() {
         if (!mounted) return
         map.current = L.map(mapRef.current, { center: [12.9716, 77.5946], zoom: 13 })
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map.current)
+
+        // Load and draw zones overlay
+        try {
+          const res = await fetch(`${API_BASE_URL.replace(/\/$/, '')}/zones`)
+          const arr = await res.json()
+          const list = Array.isArray(arr) ? arr : (Array.isArray(arr?.data) ? arr.data : [])
+          setZones(list)
+          // draw
+          zonesLayersRef.current = []
+          list.forEach(z => {
+            const latlngs = Array.isArray(z.coordinates) ? z.coordinates.map(c => [c.lat, c.lng]) : []
+            if (latlngs.length >= 3) {
+              const poly = L.polygon(latlngs, { color: z.color || '#3b82f6', weight: 2, fillColor: z.color || '#3b82f6', fillOpacity: 0.15 })
+              poly.addTo(map.current)
+              zonesLayersRef.current.push(poly)
+            }
+          })
+        } catch {}
 
         // Try to center on driver's last known location from backend
         try {
@@ -50,7 +69,6 @@ export default function DriverLiveMapPage() {
               const ll = [lat, lng]
               marker.current = L.marker(ll).addTo(map.current)
               map.current.setView(ll, 14)
-              zoneCircle.current = L.circle(ll, { radius: 3000, color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.12 }).addTo(map.current)
             }
           }
         } catch {}
@@ -66,9 +84,6 @@ export default function DriverLiveMapPage() {
             if (!marker.current) marker.current = L.marker(ll).addTo(map.current)
             marker.current.setLatLng(ll)
             map.current.setView(ll, 15)
-            if (!zoneCircle.current) {
-              zoneCircle.current = L.circle(ll, { radius: 3000, color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.12 }).addTo(map.current)
-            } else zoneCircle.current.setLatLng(ll)
           }, (err) => {
             setError(err?.message || 'Location permission denied')
           }, { enableHighAccuracy: true, maximumAge: 5000 })
@@ -82,6 +97,13 @@ export default function DriverLiveMapPage() {
     return () => { 
       mounted = false 
       if (watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchId)
+      // cleanup zone layers
+      try {
+        if (map.current && zonesLayersRef.current.length) {
+          zonesLayersRef.current.forEach(l => { try { map.current.removeLayer(l) } catch {} })
+          zonesLayersRef.current = []
+        }
+      } catch {}
     }
   }, [])
 

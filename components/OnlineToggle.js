@@ -21,7 +21,9 @@ export default function OnlineToggle({ initialStatus = false, onStatusChange, is
     try {
       const newStatus = !currentOnlineState;
       const token = localStorage.getItem('auth_token');
-      const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4001').replace(/\/+$/, '');
+      // Ensure we always hit the /api base
+      const RAW_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4001').replace(/\/+$/, '');
+      const API_BASE_URL = RAW_BASE.endsWith('/api') ? RAW_BASE : `${RAW_BASE}/api`;
       
       if (!token) {
         throw new Error('No authentication token found');
@@ -31,6 +33,49 @@ export default function OnlineToggle({ initialStatus = false, onStatusChange, is
       console.log('Toggling status to:', newStatus);
       console.log('Using API URL:', apiUrl);
       
+      // Try to get current position for zone validation when going online
+      let lat = undefined, lng = undefined;
+      if (newStatus) {
+        if (typeof navigator !== 'undefined' && navigator.geolocation) {
+          try {
+            const pos = await new Promise((resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 });
+            });
+            lat = pos.coords.latitude;
+            lng = pos.coords.longitude;
+          } catch (geoErr) {
+            console.warn('Geolocation failed:', geoErr?.message || geoErr);
+          }
+        }
+        // Require fresh location to go online (prevents stale [0,0] in DB)
+        if (typeof lat !== 'number' || typeof lng !== 'number') {
+          alert('Location permission is required to go online. Please allow location access and try again.');
+          setIsLoading(false);
+          return;
+        }
+        // Update server-side cached location first
+        const locResp = await fetch(`${API_BASE_URL}/drivers/me/location`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ lat, lng })
+        });
+        if (!locResp.ok) {
+          const t = await locResp.text();
+          console.error('Failed to update location:', t);
+          alert('Could not update your location. Please try again.');
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      const body = { isOnline: newStatus };
+      if (typeof lat === 'number' && typeof lng === 'number') {
+        body.lat = lat; body.lng = lng;
+      }
+
       // Make direct API call to backend
       const response = await fetch(apiUrl, {
         method: 'PATCH',
@@ -38,7 +83,7 @@ export default function OnlineToggle({ initialStatus = false, onStatusChange, is
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ isOnline: newStatus })
+        body: JSON.stringify(body)
       });
 
       console.log('Response status:', response.status);
