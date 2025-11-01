@@ -47,6 +47,35 @@ export default function GlobalOrderListener() {
     return () => { try { clearTimeout(timer) } catch {} }
   }, [shouldAttach])
 
+  // Heartbeat to keep presence alive while online
+  useEffect(() => {
+    if (!shouldAttach) return
+    let timer
+    let stopped = false
+    const beat = async () => {
+      try {
+        if (!isOnline) return
+        const t = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+        if (!t) return
+        let lat, lng
+        if (typeof navigator !== 'undefined' && navigator.geolocation) {
+          try {
+            const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 }))
+            lat = pos.coords.latitude; lng = pos.coords.longitude
+          } catch {}
+        }
+        await fetch(`${API_BASE_URL}/drivers/me/heartbeat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${t}` },
+          body: JSON.stringify({ lat, lng })
+        })
+      } catch {}
+      if (!stopped) timer = setTimeout(beat, 20000)
+    }
+    beat()
+    return () => { stopped = true; if (timer) clearTimeout(timer) }
+  }, [shouldAttach, isOnline])
+
   // Resume audio context on any click/tap globally
   useEffect(() => {
     const handler = () => resetAudioContext()
