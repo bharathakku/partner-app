@@ -66,24 +66,8 @@ export async function GET() {
     
   } catch (error) {
     console.error('❌ Error in GET /api/admin/drivers/online:', error);
-    return Response.json({
-      error: 'Internal server error',
-      message: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    }, { status: 500 });
-  }
-      profilePhoto: driver.profilePhoto || '/default-avatar.png'
-    }));
-    
-    console.log('Returning drivers:', formattedDrivers.length);
-    return Response.json(formattedDrivers);
-    
-  } catch (error) {
-    console.error('Error in /api/admin/drivers/online:', error);
-    
     // Return test data if there's an error in development
     if (process.env.NODE_ENV !== 'production') {
-      console.log('Returning test data due to error');
       const testDriver = {
         id: 'test-error-123',
         name: 'Test Driver (Error Mode)',
@@ -96,24 +80,19 @@ export async function GET() {
         status: 'online',
         location: {
           type: 'Point',
-          coordinates: [80.2319, 13.0827], // Chennai coordinates
+          coordinates: [80.2319, 13.0827],
           address: 'Test Location (Error Mode), Chennai'
         },
         rating: 4.2,
         totalDeliveries: 24,
         profilePhoto: '/default-avatar.png'
       };
-      
       return Response.json([testDriver]);
     }
-    
-    return Response.json(
-      { 
-        error: 'Failed to fetch online drivers',
-        message: error.message,
-        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-      },
-      { status: 500 }
-    );
+    return Response.json({
+      error: 'Internal server error',
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    }, { status: 500 });
   }
 }
