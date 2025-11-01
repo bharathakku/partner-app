@@ -1,11 +1,6 @@
 'use client'
 import { useEffect, useState, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
 import { RefreshCw, MapPin, Users, List } from 'lucide-react';
 
 // Dynamically import the map component to avoid SSR issues
@@ -28,15 +23,16 @@ export default function AdminMapPage() {
   };
   
   const getStatusBadge = (status) => {
+    const base = 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium';
     switch(status) {
       case 'online':
-        return <Badge className="bg-green-500 hover:bg-green-600">Online</Badge>;
+        return <span className={`${base} bg-green-100 text-green-700`}>Online</span>;
       case 'offline':
-        return <Badge variant="outline">Offline</Badge>;
+        return <span className={`${base} border border-gray-300 text-gray-700`}>Offline</span>;
       case 'on-delivery':
-        return <Badge className="bg-blue-500 hover:bg-blue-600">On Delivery</Badge>;
+        return <span className={`${base} bg-blue-100 text-blue-700`}>On Delivery</span>;
       default:
-        return <Badge variant="outline">Unknown</Badge>;
+        return <span className={`${base} border border-gray-300 text-gray-700`}>Unknown</span>;
     }
   };
 
@@ -196,41 +192,42 @@ export default function AdminMapPage() {
             <span className="text-sm text-gray-600">
               {isLoading ? 'Loading...' : `${drivers.length} partners online`}
             </span>
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <button
               onClick={handleRefresh}
               disabled={isLoading}
+              className="px-3 py-1.5 border border-gray-300 rounded text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center"
             >
               <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
               Refresh
-            </Button>
+            </button>
           </div>
         </div>
       </header>
-
-      <Tabs 
-        defaultValue="map" 
-        className="flex-1 flex flex-col"
-        onValueChange={setActiveTab}
-      >
-        <div className="bg-white border-b">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <TabsList className="grid w-[400px] grid-cols-2">
-              <TabsTrigger value="map" className="flex items-center gap-2">
-                <MapPin className="h-4 w-4" />
-                <span>Map View</span>
-              </TabsTrigger>
-              <TabsTrigger value="list" className="flex items-center gap-2">
-                <List className="h-4 w-4" />
-                <span>List View</span>
-              </TabsTrigger>
-            </TabsList>
+      {/* Tabs header */}
+      <div className="bg-white border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid w-[400px] grid-cols-2">
+            <button
+              onClick={() => setActiveTab('map')}
+              className={`flex items-center gap-2 px-3 py-2 text-sm rounded-t ${activeTab==='map' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-700 hover:text-blue-600'}`}
+            >
+              <MapPin className="h-4 w-4" />
+              <span>Map View</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('list')}
+              className={`flex items-center gap-2 px-3 py-2 text-sm rounded-t ${activeTab==='list' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-700 hover:text-blue-600'}`}
+            >
+              <List className="h-4 w-4" />
+              <span>List View</span>
+            </button>
           </div>
         </div>
+      </div>
 
-        <div className="flex-1 overflow-hidden">
-          <TabsContent value="map" className="h-full m-0">
+      <div className="flex-1 overflow-hidden">
+        {activeTab === 'map' && (
+          <div className="h-full m-0">
             <div className="h-full relative">
               <div className="h-full w-full relative">
                 <MapWithNoSSR 
@@ -247,7 +244,7 @@ export default function AdminMapPage() {
                 </div>
               </div>
             </div>
-            
+
             {/* Sidebar with driver list */}
             <div className="absolute top-4 right-4 w-80 bg-white rounded-lg shadow-lg overflow-hidden">
               <div className="p-4 border-b">
@@ -265,9 +262,9 @@ export default function AdminMapPage() {
                         <p className="font-medium">{driver.name || 'Unknown Driver'}</p>
                         <p className="text-sm text-gray-500">{driver.vehicleNumber || 'No vehicle'}</p>
                       </div>
-                      <Badge variant={driver.isOnline ? 'default' : 'outline'}>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${driver.isOnline ? 'bg-green-100 text-green-700' : 'border border-gray-300 text-gray-700'}`}>
                         {driver.isOnline ? 'Online' : 'Offline'}
-                      </Badge>
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -278,46 +275,48 @@ export default function AdminMapPage() {
                 )}
               </div>
             </div>
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="list" className="h-full m-0">
+        {activeTab === 'list' && (
+          <div className="h-full m-0">
             <div className="max-w-7xl mx-auto p-4 sm:px-6 lg:px-8 h-full">
-              <Card>
-                <CardHeader>
+              <div className="bg-white rounded-lg border">
+                <div className="p-4 border-b">
                   <div className="flex justify-between items-center">
-                    <CardTitle>Online Partners</CardTitle>
-                    <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isLoading}>
+                    <h3 className="text-lg font-semibold">Online Partners</h3>
+                    <button onClick={handleRefresh} disabled={isLoading} className="px-3 py-1.5 border border-gray-300 rounded text-sm hover:bg-gray-50 disabled:opacity-50 inline-flex items-center">
                       <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                       Refresh
-                    </Button>
+                    </button>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Driver</TableHead>
-                        <TableHead>Contact</TableHead>
-                        <TableHead>Vehicle</TableHead>
-                        <TableHead className="text-right">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                </div>
+                <div className="p-4">
+                  <table className="min-w-full">
+                    <thead>
+                      <tr className="text-left border-b">
+                        <th className="py-2">Driver</th>
+                        <th className="py-2">Contact</th>
+                        <th className="py-2">Vehicle</th>
+                        <th className="py-2 text-right">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
                       {drivers.map((driver) => (
-                        <TableRow 
+                        <tr 
                           key={driver._id}
                           className={`cursor-pointer hover:bg-gray-50 ${selectedDriver?._id === driver._id ? 'bg-blue-50' : ''}`}
                           onClick={() => handleDriverSelect(driver)}
                         >
-                          <TableCell className="font-medium">
+                          <td className="py-3 font-medium">
                             <div className="flex flex-col">
                               <span className="font-semibold">{driver.name || 'Unknown Driver'}</span>
                               <span className="text-xs text-gray-500">
                                 {driver.vehicleType || 'Driver'}
                               </span>
                             </div>
-                          </TableCell>
-                          <TableCell>
+                          </td>
+                          <td>
                             <div className="flex flex-col">
                               <a href={`tel:${driver.phone}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>
                                 {driver.phone || 'N/A'}
@@ -326,39 +325,39 @@ export default function AdminMapPage() {
                                 {driver.email || ''}
                               </a>
                             </div>
-                          </TableCell>
-                          <TableCell>
+                          </td>
+                          <td>
                             {driver.vehicleNumber ? (
-                              <Badge variant="outline">{driver.vehicleNumber}</Badge>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-gray-300">{driver.vehicleNumber}</span>
                             ) : (
                               <span className="text-gray-400">-</span>
                             )}
-                          </TableCell>
-                          <TableCell className="text-right">
+                          </td>
+                          <td className="text-right">
                             <div className="flex flex-col items-end">
                               {getStatusBadge(driver.status || (driver.isOnline ? 'online' : 'offline'))}
                               <span className="text-xs text-gray-500 mt-1">
                                 {formatLastSeen(driver.lastSeen)}
                               </span>
                             </div>
-                          </TableCell>
-                        </TableRow>
+                          </td>
+                        </tr>
                       ))}
                       {drivers.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                        <tr>
+                          <td colSpan="5" className="text-center py-8 text-gray-500">
                             No partners are currently online
-                          </TableCell>
-                        </TableRow>
+                          </td>
+                        </tr>
                       )}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
-          </TabsContent>
-        </div>
-      </Tabs>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
